@@ -53,6 +53,62 @@ contract OperationTest is Setup {
         );
     }
 
+    function test_operation_fixed() public {
+        uint256 _amount = 1_000_000e18;
+
+        // Deposit into strategy
+        mintAndDepositIntoStrategy(strategy, user, _amount);
+
+        assertEq(strategy.totalAssets(), _amount, "!totalAssets");
+
+        // Earn Interest
+        skip(strategy.profitMaxUnlockTime());
+
+        // Report profit
+        vm.prank(keeper);
+        (uint256 profit, uint256 loss) = strategy.report();
+        console2.log(
+            "Profit from basic report:",
+            profit / 1e18,
+            "* 1e18 crvUSD"
+        );
+
+        // Check return Values
+        assertGe(profit, 0, "!profit");
+        assertEq(loss, 0, "!loss");
+
+        // simulate profits in our target vault as well this time
+        // since these vault shares are minted 1:1000 we can do the same amount for 0.1% profit
+        createProfitInTargetVault(strategy.yearnCurveLendVault(), _amount);
+        skip(strategy.profitMaxUnlockTime());
+
+        // Report profit
+        vm.prank(keeper);
+        (uint256 profitTwo, uint256 lossTwo) = strategy.report();
+        console2.log(
+            "Profit from fancy report:",
+            profitTwo / 1e18,
+            "* 1e18 crvUSD"
+        );
+
+        // Check return Values
+        assertGe(profitTwo, 0, "!profit");
+        assertEq(lossTwo, 0, "!loss");
+        assertGt(profitTwo, profit, "!profitComp");
+
+        uint256 balanceBefore = asset.balanceOf(user);
+
+        // Withdraw all funds
+        vm.prank(user);
+        strategy.redeem(_amount, user, user);
+
+        assertGe(
+            asset.balanceOf(user),
+            balanceBefore + _amount,
+            "!final balance"
+        );
+    }
+
     function test_profitableReport(
         uint256 _amount,
         uint16 _profitFactor

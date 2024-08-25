@@ -4,8 +4,10 @@ pragma solidity ^0.8.18;
 import "forge-std/console2.sol";
 import {ExtendedTest} from "./ExtendedTest.sol";
 
-import {Strategy, ERC20} from "../../Strategy.sol";
+import {StrategyCrvusdRouter, ERC20} from "../../StrategyCrvusdRouter.sol";
 import {IStrategyInterface} from "../../interfaces/IStrategyInterface.sol";
+import {IV2StrategyInterface} from "../../interfaces/IV2StrategyInterface.sol";
+import {IYearnV2} from "../../interfaces/ICrvusdInterfaces.sol";
 
 // Inherit the events so they can be checked if desired.
 import {IEvents} from "@tokenized-strategy/interfaces/IEvents.sol";
@@ -31,6 +33,11 @@ contract Setup is ExtendedTest, IEvents {
     address public management = address(1);
     address public performanceFeeRecipient = address(3);
 
+    // addresses for deployment
+    address public curveLendVault;
+    address public curveLendGauge;
+    address public yearnCurveLendVault;
+
     // Address of the real deployed Factory
     address public factory;
 
@@ -39,8 +46,8 @@ contract Setup is ExtendedTest, IEvents {
     uint256 public MAX_BPS = 10_000;
 
     // Fuzz from $0.01 of 1e6 stable coins up to 1 trillion of a 1e18 coin
-    uint256 public maxFuzzAmount = 1e30;
-    uint256 public minFuzzAmount = 10_000;
+    uint256 public maxFuzzAmount;
+    uint256 public minFuzzAmount = 1e18;
 
     // Default profit max unlock time is set for 10 days
     uint256 public profitMaxUnlockTime = 10 days;
@@ -49,15 +56,23 @@ contract Setup is ExtendedTest, IEvents {
         _setTokenAddrs();
 
         // Set asset
-        asset = ERC20(tokenAddrs["DAI"]);
+        asset = ERC20(tokenAddrs["crvUSD"]);
 
         // Set decimals
         decimals = asset.decimals();
+
+        // set curve variables (wstETH)
+        curveLendVault = 0x21CF1c5Dc48C603b89907FE6a7AE83EA5e3709aF;
+        curveLendGauge = 0x0621982CdA4fD4041964e91AF4080583C5F099e1;
+        yearnCurveLendVault = 0xbA8e83CC28B54bB063984033Df20F9a9F1220C24;
 
         // Deploy strategy and set variables
         strategy = IStrategyInterface(setUpStrategy());
 
         factory = strategy.FACTORY();
+
+        // update our max fuzz amount based on max deposit to the strategy
+        maxFuzzAmount = strategy.availableDepositLimit(user);
 
         // label all the used addresses for traces
         vm.label(keeper, "keeper");
@@ -71,7 +86,15 @@ contract Setup is ExtendedTest, IEvents {
     function setUpStrategy() public returns (address) {
         // we save the strategy as a IStrategyInterface to give it the needed interface
         IStrategyInterface _strategy = IStrategyInterface(
-            address(new Strategy(address(asset), "Tokenized Strategy"))
+            address(
+                new StrategyCrvusdRouter(
+                    address(asset),
+                    "Curve Boosted crvUSD-wstETH Lender",
+                    curveLendVault,
+                    curveLendGauge,
+                    yearnCurveLendVault
+                )
+            )
         );
 
         // set keeper
@@ -132,6 +155,44 @@ contract Setup is ExtendedTest, IEvents {
         deal(address(_asset), _to, balanceBefore + _amount);
     }
 
+    function createProfitInTargetVault(
+        address _targetVault,
+        uint256 _amount
+    ) public {
+        // setup our tokens
+        IYearnV2 targetVault = IYearnV2(_targetVault);
+        ERC20 underlyingToken = ERC20(targetVault.token());
+
+        // here we assume using 100% curve, index 1 in the withdrawal queue
+        IV2StrategyInterface targetStrategy = IV2StrategyInterface(
+            targetVault.withdrawalQueue(1)
+        );
+
+        // harvest the strategy to deploy any funds sitting in the vault
+        address strategist = targetStrategy.strategist();
+        vm.prank(strategist);
+        targetStrategy.harvest();
+
+        // do a smol sleep since we can't harvest in the same block (?)
+        skip(1 seconds);
+
+        // check the balance prior to dealing
+        uint256 balanceBefore = underlyingToken.balanceOf(
+            address(targetStrategy)
+        );
+
+        // send the LP token to the strategy
+        deal(
+            address(underlyingToken),
+            address(targetStrategy),
+            balanceBefore + _amount
+        );
+
+        // harvest the strategy again to realize donated profits
+        vm.prank(strategist);
+        targetStrategy.harvest();
+    }
+
     function setFees(uint16 _protocolFee, uint16 _performanceFee) public {
         address gov = IFactory(factory).governance();
 
@@ -154,5 +215,6 @@ contract Setup is ExtendedTest, IEvents {
         tokenAddrs["USDT"] = 0xdAC17F958D2ee523a2206206994597C13D831ec7;
         tokenAddrs["DAI"] = 0x6B175474E89094C44Da98b954EedeAC495271d0F;
         tokenAddrs["USDC"] = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+        tokenAddrs["crvUSD"] = 0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E;
     }
 }
