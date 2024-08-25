@@ -32,8 +32,10 @@ contract ShutdownTest is Setup {
         vm.prank(user);
         strategy.redeem(_amount, user, user);
 
+        assertEq(strategy.totalAssets(), 0, "!zero");
+
         assertGe(
-            asset.balanceOf(user),
+            asset.balanceOf(user) + 1, // add a 1 wei buffer since we convert between shares on deposit/withdraw
             balanceBefore + _amount,
             "!final balance"
         );

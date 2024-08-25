@@ -114,7 +114,10 @@ contract OperationTest is Setup {
         uint16 _profitFactor
     ) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
-        _profitFactor = uint16(bound(uint256(_profitFactor), 10, MAX_BPS));
+
+        // since our lender is default profitable, doing max 10_000 will revert w/ health check
+        //  (more than 100% total profit). so do 9950 to give some buffer for the interest earned.
+        _profitFactor = uint16(bound(uint256(_profitFactor), 10, 9_950));
 
         // Deposit into strategy
         mintAndDepositIntoStrategy(strategy, user, _amount);
@@ -124,9 +127,15 @@ contract OperationTest is Setup {
         // Earn Interest
         skip(1 days);
 
+        // confirm that our strategy is empty
+        assertEq(asset.balanceOf(address(strategy)), 0, "!empty");
+
         // TODO: implement logic to simulate earning interest.
         uint256 toAirdrop = (_amount * _profitFactor) / MAX_BPS;
         airdrop(asset, address(strategy), toAirdrop);
+
+        // confirm that we have our airdrop amount in our strategy loose
+        assertEq(asset.balanceOf(address(strategy)), toAirdrop, "!airdrop");
 
         // Report profit
         vm.prank(keeper);
@@ -156,7 +165,10 @@ contract OperationTest is Setup {
         uint16 _profitFactor
     ) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
-        _profitFactor = uint16(bound(uint256(_profitFactor), 10, MAX_BPS));
+
+        // since our lender is default profitable, doing max 10_000 will revert w/ health check
+        //  (more than 100% total profit). so do 9950 to give some buffer for the interest earned.
+        _profitFactor = uint16(bound(uint256(_profitFactor), 10, 9_950));
 
         // Set protocol fee to 0 and perf fee to 10%
         setFees(0, 1_000);
