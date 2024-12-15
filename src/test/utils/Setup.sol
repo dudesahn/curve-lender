@@ -59,11 +59,11 @@ contract Setup is ExtendedTest, IEvents {
     uint256 public MAX_BPS = 10_000;
 
     // Fuzz from $0.01 of 1e6 stable coins up to 1 trillion of a 1e18 coin
-    uint256 public maxFuzzAmount;
-    uint256 public minFuzzAmount = 1e18;
+    uint256 public maxFuzzAmount = 1e30;
+    uint256 public minFuzzAmount = 1e4;
 
     // Default profit max unlock time is set for 10 days
-    uint256 public profitMaxUnlockTime = 10 days;
+    uint256 public profitMaxUnlockTime = 1 days;
 
     function setUp() public virtual {
         _setTokenAddrs();
@@ -93,7 +93,8 @@ contract Setup is ExtendedTest, IEvents {
         // setup extra rewards for gauge/proxy
         hasRewards = false;
         if (hasRewards) {
-            rewardToken; // set this equal to something if we have one
+            rewardToken = 0x55C08ca52497e2f1534B59E2917BF524D4765257; // set this equal to something if we have one
+            // UwU = 0x55C08ca52497e2f1534B59E2917BF524D4765257
         }
 
         // Deploy strategy and set variables
@@ -106,10 +107,8 @@ contract Setup is ExtendedTest, IEvents {
         // add our new strategy to the voter proxy
         setUpProxy();
 
-        // update our max fuzz amount based on max deposit to the strategy
-        maxFuzzAmount = strategy.availableDepositLimit(user);
-
         // label all the used addresses for traces
+        vm.label(user, "user");
         vm.label(keeper, "keeper");
         vm.label(factory, "factory");
         vm.label(address(asset), "asset");
@@ -149,16 +148,21 @@ contract Setup is ExtendedTest, IEvents {
     function setUpTradeFactory() public {
         vm.prank(management);
         strategy.setTradeFactory(tradeFactory);
+        vm.prank(management);
+        strategy.addToken(address(crv));
+        if (hasRewards) {
+            // add our rewards token to our strategy if needed
+            vm.prank(management);
+            strategy.addToken(rewardToken);
+        }
     }
 
     function setUpProxy() public {
         // approve reward token on our strategy proxy if needed
         if (hasRewards) {
-            // first, add our rewards token to our strategy, then use that for our strategy proxy
-            vm.prank(management);
-            strategy.addToken(rewardToken);
+            // shouldn't need this for non-legacy gauges
             // vm.prank(chad);
-            // strategyProxy.approveRewardToken(rewardToken, true); // shouldn't need this for non-legacy gauges
+            // strategyProxy.approveRewardToken(rewardToken, true);
         }
 
         // approve our new strategy on the proxy (if we want to test an existing want, a bit more work is needed)
@@ -172,13 +176,14 @@ contract Setup is ExtendedTest, IEvents {
         //    assert gauge.balanceOf(voter) == 0
 
         // link the strategy and gauge on the strategy proxy
+        vm.startPrank(chad); // need to do start/stop since we pull the gauge via call
         strategyProxy.approveStrategy(strategy.gauge(), address(strategy));
         vm.stopPrank();
     }
 
     function simulateTradeFactory(uint256 _profitAmount) public {
         // check for reward token balance
-        uint256 rewardBalance;
+        uint256 rewardBalance = 0;
         if (hasRewards) {
             // trade factory should sweep out rewards, and we mint the strategy _profitAmount of asset
             rewardBalance = ERC20(rewardToken).balanceOf(address(strategy));
@@ -186,6 +191,12 @@ contract Setup is ExtendedTest, IEvents {
 
         // if we have reward tokens, sweep it out, and send back our designated profitAmount
         if (rewardBalance > 0) {
+            console2.log(
+                "Reward token sitting in our strategy",
+                rewardBalance / 1e18,
+                "* 1e18"
+            );
+
             vm.prank(tradeFactory);
             ERC20(rewardToken).transferFrom(
                 address(strategy),
@@ -193,21 +204,26 @@ contract Setup is ExtendedTest, IEvents {
                 rewardBalance
             );
             airdrop(asset, address(strategy), _profitAmount);
+            rewardBalance = ERC20(rewardToken).balanceOf(address(strategy));
         }
 
         // trade factory should sweep out CRV, and we mint the strategy _profitAmount of asset
         uint256 crvBalance = crv.balanceOf(address(strategy));
+        console2.log(
+            "CRV sitting in our strategy",
+            crvBalance / 1e18,
+            "* 1e18 CRV"
+        );
 
         // if we have CRV, sweep it out, and send back our designated profitAmount
         if (crvBalance > 0) {
             vm.prank(tradeFactory);
             crv.transferFrom(address(strategy), tradeFactory, crvBalance);
             airdrop(asset, address(strategy), _profitAmount);
+            crvBalance = crv.balanceOf(address(strategy));
         }
 
-        // confirm that we swept it out
-        rewardBalance = ERC20(rewardToken).balanceOf(address(strategy));
-        crvBalance = crv.balanceOf(address(strategy));
+        // confirm that we swept everything out
         assertEq(crvBalance, 0, "!crvBalance");
         assertEq(rewardBalance, 0, "!rewardBalance");
     }

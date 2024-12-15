@@ -54,10 +54,14 @@ contract OperationTest is Setup {
     }
 
     function test_operation_fixed() public {
-        uint256 _amount = 1_000_000e18;
+        uint256 _amount = 10_000e18;
 
         // Deposit into strategy
         mintAndDepositIntoStrategy(strategy, user, _amount);
+
+        // make sure the gauge tokens are in the voter
+        uint256 gaugeBalance = ERC20(strategy.gauge()).balanceOf(voter);
+        assertGt(gaugeBalance, 0, "!gaugeVoter");
 
         assertEq(strategy.totalAssets(), _amount, "!totalAssets");
 
@@ -66,7 +70,7 @@ contract OperationTest is Setup {
 
         // simulate checking our strategy for CRV and reward tokens using trade factory
         // should be no tokens to claim since we don't have the logic auto-claiming during reports
-        uint256 simulatedProfit = _amount / 1000; // 0.1% profit
+        uint256 simulatedProfit = _amount / 200; // 0.5% profit
         simulateTradeFactory(simulatedProfit);
 
         // Report profit
@@ -77,6 +81,9 @@ contract OperationTest is Setup {
             profit / 1e18,
             "* 1e18 crvUSD"
         );
+        uint256 roughApr = (((profit * 365) /
+            (strategy.profitMaxUnlockTime() / 86400)) * 10_000) / _amount;
+        console2.log("Rough APR from basic report:", roughApr, "BPS");
 
         // Check return Values
         assertGe(profit, 0, "!profit");

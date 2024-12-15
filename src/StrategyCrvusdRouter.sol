@@ -7,6 +7,7 @@ import {ICurveStrategyProxy, IGauge} from "./interfaces/ICrvusdInterfaces.sol";
 
 // *** NOTE: MAKE SURE THIS STRATEGY CAN WORK WITH MARKETS/GAUGES THAT HAVEN'T BEEN ADDED TO THE GAUGE CONTROLLER
 // OR MAYBE WE JUST ALSO WRITE A STRATEGY VERSION FOR THOSE
+// a bit worried this will revert somewhere in strategy proxy or something
 
 contract StrategyCrvusdRouter is Base4626Compounder, TradeFactorySwapper {
     using SafeERC20 for ERC20;
@@ -15,7 +16,7 @@ contract StrategyCrvusdRouter is Base4626Compounder, TradeFactorySwapper {
     ICurveStrategyProxy public proxy;
 
     // Curve gauge address corresponding to our Curve Lend LP
-    address internal immutable gauge;
+    address public immutable gauge;
 
     // yChad, the only one who can update our strategy proxy address
     address internal constant GOV = 0xFEB4acf3df3cDEA7399794D0869ef76A6EfAff52;
@@ -50,30 +51,23 @@ contract StrategyCrvusdRouter is Base4626Compounder, TradeFactorySwapper {
 
     function _stake() internal override {
         // send any loose 4626 vault tokens to yearn's proxy to deposit to the gauge and send to the voter
-        uint256 toDeposit = balanceOfVault();
-
-        // don't bother with dust to prevent issues with share conversion
-        // curve lend vaults are 1:1000, so this is ~0.001 crvUSD
-        if (toDeposit >= 1e18) {
-            asset.safeTransfer(address(proxy), toDeposit);
-            proxy.deposit(gauge, address(asset));
-        }
+        ERC20(address(vault)).safeTransfer(address(proxy), balanceOfVault());
+        proxy.deposit(gauge, address(vault));
     }
 
     function _unStake(uint256 _amount) internal override {
         // _amount is already in 4626 vault shares, no need to convert from asset
         // ** NOTE make sure _amount can't be more than balanceOfStake()
-        proxy.withdraw(gauge, address(asset), _amount);
+        require(_amount < balanceOfStake(), "!conversion");
+        proxy.withdraw(gauge, address(vault), _amount);
     }
 
     function vaultsMaxWithdraw() public view override returns (uint256) {
-        // We need to use the staking contract address for maxRedeem
-        // Convert the vault shares to `asset`.
         // we use the gauge address here since that's where our strategy proxy deposits the LP
-        // also include the strategy itself since there may be loose funds waiting
+        // should be the minimum of what the gauge can redeem (limited by utilization), and our staked balance
         return
             vault.convertToAssets(
-                vault.maxRedeem(gauge) + vault.maxRedeem(address(this))
+                Math.min(vault.maxRedeem(gauge), balanceOfStake())
             );
     }
 
