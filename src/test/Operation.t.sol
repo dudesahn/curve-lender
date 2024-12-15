@@ -64,6 +64,11 @@ contract OperationTest is Setup {
         // Earn Interest
         skip(strategy.profitMaxUnlockTime());
 
+        // simulate checking our strategy for CRV and reward tokens using trade factory
+        // should be no tokens to claim since we don't have the logic auto-claiming during reports
+        uint256 simulatedProfit = _amount / 1000; // 0.1% profit
+        simulateTradeFactory(simulatedProfit);
+
         // Report profit
         vm.prank(keeper);
         (uint256 profit, uint256 loss) = strategy.report();
@@ -77,10 +82,11 @@ contract OperationTest is Setup {
         assertGe(profit, 0, "!profit");
         assertEq(loss, 0, "!loss");
 
-        // simulate profits in our target vault as well this time
-        // since these vault shares are minted 1:1000 we can do the same amount for 0.1% profit
-        createProfitInTargetVault(strategy.yearnCurveLendVault(), _amount);
+        // force a claim of CRV and/or our other rewards
         skip(strategy.profitMaxUnlockTime());
+        vm.prank(management);
+        strategy.claimRewards();
+        simulateTradeFactory(simulatedProfit);
 
         // Report profit
         vm.prank(keeper);

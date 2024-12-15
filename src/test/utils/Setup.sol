@@ -7,7 +7,7 @@ import {ExtendedTest} from "./ExtendedTest.sol";
 import {StrategyCrvusdRouter, ERC20} from "../../StrategyCrvusdRouter.sol";
 import {IStrategyInterface} from "../../interfaces/IStrategyInterface.sol";
 import {IV2StrategyInterface} from "../../interfaces/IV2StrategyInterface.sol";
-import {IYearnV2} from "../../interfaces/ICrvusdInterfaces.sol";
+import {ICurveStrategyProxy} from "../../interfaces/ICrvusdInterfaces.sol";
 
 // Inherit the events so they can be checked if desired.
 import {IEvents} from "@tokenized-strategy/interfaces/IEvents.sol";
@@ -32,11 +32,24 @@ contract Setup is ExtendedTest, IEvents {
     address public keeper = address(4);
     address public management = address(1);
     address public performanceFeeRecipient = address(3);
+    address public constant chad = 0xFEB4acf3df3cDEA7399794D0869ef76A6EfAff52;
 
     // addresses for deployment
     address public curveLendVault;
     address public curveLendGauge;
-    address public yearnCurveLendVault;
+
+    // yearn's strategy proxy and voter
+    ICurveStrategyProxy public constant strategyProxy =
+        ICurveStrategyProxy(0x78eDcb307AC1d1F8F5Fd070B377A6e69C8dcFC34);
+    address public constant voter = 0xF147b8125d2ef93FB6965Db97D6746952a133934;
+
+    // trade factory and rewards stuff
+    address public constant tradeFactory =
+        0xb634316E06cC0B358437CbadD4dC94F1D3a92B3b;
+    bool public hasRewards; // bool for if a gauge has extra rewards we need to claim
+    address public rewardToken;
+    ERC20 public constant crv =
+        ERC20(0xD533a949740bb3306d119CC777fa900bA034cd52);
 
     // Address of the real deployed Factory
     address public factory;
@@ -61,15 +74,37 @@ contract Setup is ExtendedTest, IEvents {
         // Set decimals
         decimals = asset.decimals();
 
-        // set curve variables (wstETH)
-        curveLendVault = 0x21CF1c5Dc48C603b89907FE6a7AE83EA5e3709aF;
-        curveLendGauge = 0x0621982CdA4fD4041964e91AF4080583C5F099e1;
-        yearnCurveLendVault = 0xbA8e83CC28B54bB063984033Df20F9a9F1220C24;
+        // set market/gauge variables
+        uint256 useMarket = 1;
+        if (useMarket == 0) {
+            // wstETH (should revert since vault exists)
+            curveLendVault = 0x21CF1c5Dc48C603b89907FE6a7AE83EA5e3709aF;
+            curveLendGauge = 0x0621982CdA4fD4041964e91AF4080583C5F099e1;
+        } else if (useMarket == 1) {
+            // sDOLA (should not revert)
+            curveLendVault = 0x14361C243174794E2207296a6AD59bb0Dec1d388;
+            curveLendGauge = 0x30e06CADFbC54d61B7821dC1e58026bf3435d2Fe;
+        } else if (useMarket == 2) {
+            // UwU (use to test gauges with extra incentives)
+            curveLendVault = 0x7586C58bf6292B3C9DeFC8333fc757d6c5dA0f7E;
+            curveLendGauge = 0xad7B288315b0d71D62827338251A8D89A98132A0;
+        }
+
+        // setup extra rewards for gauge/proxy
+        hasRewards = false;
+        if (hasRewards) {
+            rewardToken; // set this equal to something if we have one
+        }
 
         // Deploy strategy and set variables
         strategy = IStrategyInterface(setUpStrategy());
-
         factory = strategy.FACTORY();
+
+        // setup trade factory
+        setUpTradeFactory();
+
+        // add our new strategy to the voter proxy
+        setUpProxy();
 
         // update our max fuzz amount based on max deposit to the strategy
         maxFuzzAmount = strategy.availableDepositLimit(user);
@@ -79,6 +114,7 @@ contract Setup is ExtendedTest, IEvents {
         vm.label(factory, "factory");
         vm.label(address(asset), "asset");
         vm.label(management, "management");
+        vm.label(chad, "ychad");
         vm.label(address(strategy), "strategy");
         vm.label(performanceFeeRecipient, "performanceFeeRecipient");
     }
@@ -89,10 +125,10 @@ contract Setup is ExtendedTest, IEvents {
             address(
                 new StrategyCrvusdRouter(
                     address(asset),
-                    "Curve Boosted crvUSD-wstETH Lender",
+                    "Curve Boosted crvUSD-sDOLA Lender",
                     curveLendVault,
                     curveLendGauge,
-                    yearnCurveLendVault
+                    address(strategyProxy)
                 )
             )
         );
@@ -108,6 +144,72 @@ contract Setup is ExtendedTest, IEvents {
         _strategy.acceptManagement();
 
         return address(_strategy);
+    }
+
+    function setUpTradeFactory() public {
+        vm.prank(management);
+        strategy.setTradeFactory(tradeFactory);
+    }
+
+    function setUpProxy() public {
+        // approve reward token on our strategy proxy if needed
+        if (hasRewards) {
+            // first, add our rewards token to our strategy, then use that for our strategy proxy
+            vm.prank(management);
+            strategy.addToken(rewardToken);
+            // vm.prank(chad);
+            // strategyProxy.approveRewardToken(rewardToken, true); // shouldn't need this for non-legacy gauges
+        }
+
+        // approve our new strategy on the proxy (if we want to test an existing want, a bit more work is needed)
+        //if strategyProxy.strategies(strategy.gauge()) != address(0) {
+        //    // revoke strategy on gauge
+        //    strategyProxy.revokeStrategy(strategy.gauge(), sender=gov)
+        // }
+        //empty out our voter if it holds gauge tokens
+        //if gauge.balanceOf(voter) > 0:
+        //    gauge.transfer(ZERO_ADDRESS, gauge.balanceOf(voter), sender=voter)
+        //    assert gauge.balanceOf(voter) == 0
+
+        // link the strategy and gauge on the strategy proxy
+        strategyProxy.approveStrategy(strategy.gauge(), address(strategy));
+        vm.stopPrank();
+    }
+
+    function simulateTradeFactory(uint256 _profitAmount) public {
+        // check for reward token balance
+        uint256 rewardBalance;
+        if (hasRewards) {
+            // trade factory should sweep out rewards, and we mint the strategy _profitAmount of asset
+            rewardBalance = ERC20(rewardToken).balanceOf(address(strategy));
+        }
+
+        // if we have reward tokens, sweep it out, and send back our designated profitAmount
+        if (rewardBalance > 0) {
+            vm.prank(tradeFactory);
+            ERC20(rewardToken).transferFrom(
+                address(strategy),
+                tradeFactory,
+                rewardBalance
+            );
+            airdrop(asset, address(strategy), _profitAmount);
+        }
+
+        // trade factory should sweep out CRV, and we mint the strategy _profitAmount of asset
+        uint256 crvBalance = crv.balanceOf(address(strategy));
+
+        // if we have CRV, sweep it out, and send back our designated profitAmount
+        if (crvBalance > 0) {
+            vm.prank(tradeFactory);
+            crv.transferFrom(address(strategy), tradeFactory, crvBalance);
+            airdrop(asset, address(strategy), _profitAmount);
+        }
+
+        // confirm that we swept it out
+        rewardBalance = ERC20(rewardToken).balanceOf(address(strategy));
+        crvBalance = crv.balanceOf(address(strategy));
+        assertEq(crvBalance, 0, "!crvBalance");
+        assertEq(rewardBalance, 0, "!rewardBalance");
     }
 
     function depositIntoStrategy(
@@ -153,44 +255,6 @@ contract Setup is ExtendedTest, IEvents {
     function airdrop(ERC20 _asset, address _to, uint256 _amount) public {
         uint256 balanceBefore = _asset.balanceOf(_to);
         deal(address(_asset), _to, balanceBefore + _amount);
-    }
-
-    function createProfitInTargetVault(
-        address _targetVault,
-        uint256 _amount
-    ) public {
-        // setup our tokens
-        IYearnV2 targetVault = IYearnV2(_targetVault);
-        ERC20 underlyingToken = ERC20(targetVault.token());
-
-        // here we assume using 100% curve, index 1 in the withdrawal queue
-        IV2StrategyInterface targetStrategy = IV2StrategyInterface(
-            targetVault.withdrawalQueue(1)
-        );
-
-        // harvest the strategy to deploy any funds sitting in the vault
-        address strategist = targetStrategy.strategist();
-        vm.prank(strategist);
-        targetStrategy.harvest();
-
-        // do a smol sleep since we can't harvest in the same block (?)
-        skip(1 seconds);
-
-        // check the balance prior to dealing
-        uint256 balanceBefore = underlyingToken.balanceOf(
-            address(targetStrategy)
-        );
-
-        // send the LP token to the strategy
-        deal(
-            address(underlyingToken),
-            address(targetStrategy),
-            balanceBefore + _amount
-        );
-
-        // harvest the strategy again to realize donated profits
-        vm.prank(strategist);
-        targetStrategy.harvest();
     }
 
     function setFees(uint16 _protocolFee, uint16 _performanceFee) public {

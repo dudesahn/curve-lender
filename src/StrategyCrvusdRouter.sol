@@ -2,119 +2,144 @@
 pragma solidity ^0.8.18;
 
 import {Base4626Compounder, ERC20, SafeERC20, Math} from "@periphery/Bases/4626Compounder/Base4626Compounder.sol";
-import {IYearnV2, ISharePriceHelper, IGauge} from "./interfaces/ICrvusdInterfaces.sol";
+import {TradeFactorySwapper} from "@periphery/swappers/TradeFactorySwapper.sol";
+import {ICurveStrategyProxy, IGauge} from "./interfaces/ICrvusdInterfaces.sol";
 
-contract StrategyCrvusdRouter is Base4626Compounder {
+// *** NOTE: MAKE SURE THIS STRATEGY CAN WORK WITH MARKETS/GAUGES THAT HAVEN'T BEEN ADDED TO THE GAUGE CONTROLLER
+// OR MAYBE WE JUST ALSO WRITE A STRATEGY VERSION FOR THOSE
+
+contract StrategyCrvusdRouter is Base4626Compounder, TradeFactorySwapper {
     using SafeERC20 for ERC20;
 
-    /// @notice Address of the Yearn Curve Lend factory vault.
-    IYearnV2 public immutable yearnCurveLendVault;
-
-    // helper contract to more accurately convert between assets and V2 vault shares
-    ISharePriceHelper internal constant sharePriceHelper =
-        ISharePriceHelper(0x444443bae5bB8640677A8cdF94CB8879Fec948Ec);
+    /// @notice Yearns strategyProxy, needed for interacting with our Curve Voter.
+    ICurveStrategyProxy public proxy;
 
     // Curve gauge address corresponding to our Curve Lend LP
     address internal immutable gauge;
+
+    // yChad, the only one who can update our strategy proxy address
+    address internal constant GOV = 0xFEB4acf3df3cDEA7399794D0869ef76A6EfAff52;
 
     /**
      * @param _asset Underlying asset to use for this strategy.
      * @param _name Name to use for this strategy. Ideally something human readable for a UI to use.
      * @param _vault ERC4626 vault token to use. In Curve Lend, these are the base LP tokens.
      * @param _gauge Gauge address for the Curve Lend LP.
-     * @param _yearnCurveLendVault Address for the Curve Lend Yearn vault.
+     * @param _proxy Address for Yearn's strategy proxy.
      */
     constructor(
         address _asset,
         string memory _name,
         address _vault,
         address _gauge,
-        address _yearnCurveLendVault
+        address _proxy
     ) Base4626Compounder(_asset, _name, _vault) {
-        yearnCurveLendVault = IYearnV2(_yearnCurveLendVault);
-        require(_vault == yearnCurveLendVault.token(), "token mismatch");
         require(_vault == IGauge(_gauge).lp_token(), "gauge mismatch");
         gauge = _gauge;
-
-        ERC20(_vault).forceApprove(_yearnCurveLendVault, type(uint256).max);
+        proxy = ICurveStrategyProxy(_proxy);
     }
 
     /* ========== BASE4626 FUNCTIONS ========== */
 
     /**
-     * @notice Balance of 4626 vault tokens held in our yearn Curve Lend vault tokens
-     * @dev Subtract 1 wei to account for rounding issues
+     * @notice Balance of 4626 vault tokens held in our strategy proxy
      */
     function balanceOfStake() public view override returns (uint256 stake) {
-        stake = sharePriceHelper.sharesToAmount(
-            address(yearnCurveLendVault),
-            yearnCurveLendVault.balanceOf(address(this))
-        );
-        if (stake > 0) {
-            stake -= 1;
-        }
+        stake = proxy.balanceOf(gauge);
     }
 
     function _stake() internal override {
-        // deposit any loose 4626 vault tokens to the yearn curve lend vault
+        // send any loose 4626 vault tokens to yearn's proxy to deposit to the gauge and send to the voter
         uint256 toDeposit = balanceOfVault();
 
         // don't bother with dust to prevent issues with share conversion
         // curve lend vaults are 1:1000, so this is ~0.001 crvUSD
         if (toDeposit >= 1e18) {
-            // pass the actual amount to avoid partial deposits
-            yearnCurveLendVault.deposit(toDeposit);
+            asset.safeTransfer(address(proxy), toDeposit);
+            proxy.deposit(gauge, address(asset));
         }
     }
 
     function _unStake(uint256 _amount) internal override {
         // _amount is already in 4626 vault shares, no need to convert from asset
-        //  note that we do need to convert from 4626 vault shares to V2 vault shares
-        // add 1 wei here to prevent loss from floor math
-        uint256 sharesToWithdraw = sharePriceHelper.amountToShares(
-            address(yearnCurveLendVault),
-            _amount
-        ) + 1;
-        uint256 vaultTokenBalance = yearnCurveLendVault.balanceOf(
-            address(this)
-        );
-
-        // can't withdraw more than we have
-        if (sharesToWithdraw > vaultTokenBalance) {
-            sharesToWithdraw = vaultTokenBalance;
-        }
-
-        // pass the actual amount
-        yearnCurveLendVault.withdraw(sharesToWithdraw);
+        // ** NOTE make sure _amount can't be more than balanceOfStake()
+        proxy.withdraw(gauge, address(asset), _amount);
     }
 
     function vaultsMaxWithdraw() public view override returns (uint256) {
         // We need to use the staking contract address for maxRedeem
         // Convert the vault shares to `asset`.
-        // we use the gauge address here since that's where our yearn curve lend vault sends the tokens
-        // also include the vault itself since there may be loose funds waiting there
+        // we use the gauge address here since that's where our strategy proxy deposits the LP
+        // also include the strategy itself since there may be loose funds waiting
         return
             vault.convertToAssets(
-                vault.maxRedeem(gauge) +
-                    vault.maxRedeem(address(yearnCurveLendVault))
+                vault.maxRedeem(gauge) + vault.maxRedeem(address(this))
             );
     }
 
-    function availableDepositLimit(
-        address
-    ) public view override returns (uint256) {
-        uint256 limit = yearnCurveLendVault.depositLimit();
-        uint256 assets = yearnCurveLendVault.totalAssets();
+    // NOTE: only include this if we want to claim CRV on every report()
+    //function _claimAndSellRewards() internal override {
+    //    _claimRewards();
+    //}
 
-        uint256 underlyingLimit = vault.maxDeposit(address(this));
-        uint256 yearnVaultLimit;
+    /* ========== TRADE FACTORY FUNCTIONS ========== */
 
-        if (limit > assets) {
-            unchecked {
-                yearnVaultLimit = vault.convertToAssets(limit - assets);
-            }
+    function claimRewards() external override onlyManagement {
+        _claimRewards();
+    }
+
+    function _claimRewards() internal override {
+        // ***** IF WE WANTED TO DO NON-CRV CLAIMS, PROBABLY PUT THIS BEHIND FLAG
+        proxy.harvest(gauge);
+
+        // claim any extra rewards we may have beyond CRV
+        if (rewardTokens().length > 1) {
+            // technically we shouldn't pass CRV here, but since we know llama lend uses
+            //  newer gauges, this won't be an issue in practice
+            proxy.claimManyRewards(gauge, rewardTokens());
         }
+    }
 
-        return Math.min(underlyingLimit, yearnVaultLimit);
+    /**
+     * @notice Use to add tokens to our rewardTokens array. Also enables token on trade factory if one is set.
+     * @dev Can only be called by management.
+     * @param _token Address of token to add.
+     */
+    function addToken(address _token) external onlyManagement {
+        require(
+            _token != address(asset) && _token != address(vault),
+            "!allowed"
+        );
+        _addToken(_token, address(asset));
+    }
+
+    /**
+     * @notice Use to remove tokens from our rewardTokens array. Also disables token on trade factory.
+     * @dev Can only be called by management.
+     * @param _token Address of token to remove.
+     */
+    function removeToken(address _token) external onlyManagement {
+        _removeToken(_token, address(asset));
+    }
+
+    /**
+     * @notice Use to update our trade factory.
+     * @dev Can only be called by management.
+     * @param _tradeFactory Address of new trade factory.
+     */
+    function setTradeFactory(address _tradeFactory) external onlyManagement {
+        _setTradeFactory(_tradeFactory, address(asset));
+    }
+
+    /* ========== PERMISSIONED FUNCTIONS ========== */
+
+    /**
+     * @notice Use this to set or update our strategy proxy.
+     * @dev Only governance can set this.
+     * @param _strategyProxy Address of our curve strategy proxy.
+     */
+    function setProxy(address _strategyProxy) external {
+        require(msg.sender == GOV, "!gov");
+        proxy = ICurveStrategyProxy(_strategyProxy);
     }
 }
