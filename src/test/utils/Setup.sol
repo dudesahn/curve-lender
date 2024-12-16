@@ -76,10 +76,25 @@ contract Setup is ExtendedTest, IEvents {
 
         // set market/gauge variables
         uint256 useMarket = 1;
+
         if (useMarket == 0) {
-            // wstETH (should revert since vault exists)
+            // wstETH
             curveLendVault = 0x21CF1c5Dc48C603b89907FE6a7AE83EA5e3709aF;
             curveLendGauge = 0x0621982CdA4fD4041964e91AF4080583C5F099e1;
+
+            // need special logic here to shutdown the existing vault
+            IV2StrategyInterface vaultV2 = IV2StrategyInterface(
+                0xbA8e83CC28B54bB063984033Df20F9a9F1220C24
+            );
+            IV2StrategyInterface strategyV2 = IV2StrategyInterface(
+                vaultV2.withdrawalQueue(1)
+            );
+
+            // we have to clear this out before we set associate our new strategy with the gauge
+            vm.startPrank(chad);
+            vaultV2.updateStrategyDebtRatio(address(strategyV2), 0);
+            strategyV2.harvest();
+            vm.stopPrank();
         } else if (useMarket == 1) {
             // sDOLA (should not revert)
             curveLendVault = 0x14361C243174794E2207296a6AD59bb0Dec1d388;
@@ -88,13 +103,12 @@ contract Setup is ExtendedTest, IEvents {
             // UwU (use to test gauges with extra incentives)
             curveLendVault = 0x7586C58bf6292B3C9DeFC8333fc757d6c5dA0f7E;
             curveLendGauge = 0xad7B288315b0d71D62827338251A8D89A98132A0;
-        }
-
-        // setup extra rewards for gauge/proxy
-        hasRewards = false;
-        if (hasRewards) {
-            rewardToken = 0x55C08ca52497e2f1534B59E2917BF524D4765257; // set this equal to something if we have one
-            // UwU = 0x55C08ca52497e2f1534B59E2917BF524D4765257
+            hasRewards = true;
+            rewardToken = 0x55C08ca52497e2f1534B59E2917BF524D4765257;
+        } else if (useMarket == 3) {
+            // sUSDe (vault exists for it, but is empty, so nothing else needed to do)
+            curveLendVault = 0x4a7999c55d3a93dAf72EA112985e57c2E3b9e95D;
+            curveLendGauge = 0xAE1680Ef5EFc2486E73D8d5D0f8a8dB77DA5774E;
         }
 
         // Deploy strategy and set variables
@@ -138,6 +152,8 @@ contract Setup is ExtendedTest, IEvents {
         _strategy.setPerformanceFeeRecipient(performanceFeeRecipient);
         // set management of the strategy
         _strategy.setPendingManagement(management);
+        // set profit unlock
+        _strategy.setProfitMaxUnlockTime(profitMaxUnlockTime);
 
         vm.prank(management);
         _strategy.acceptManagement();
@@ -209,14 +225,14 @@ contract Setup is ExtendedTest, IEvents {
 
         // trade factory should sweep out CRV, and we mint the strategy _profitAmount of asset
         uint256 crvBalance = crv.balanceOf(address(strategy));
-        console2.log(
-            "CRV sitting in our strategy",
-            crvBalance / 1e18,
-            "* 1e18 CRV"
-        );
 
         // if we have CRV, sweep it out, and send back our designated profitAmount
         if (crvBalance > 0) {
+            console2.log(
+                "CRV sitting in our strategy",
+                crvBalance / 1e18,
+                "* 1e18 CRV"
+            );
             vm.prank(tradeFactory);
             crv.transferFrom(address(strategy), tradeFactory, crvBalance);
             airdrop(asset, address(strategy), _profitAmount);

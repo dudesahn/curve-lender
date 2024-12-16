@@ -1,23 +1,30 @@
 pragma solidity ^0.8.18;
 
 import "forge-std/console2.sol";
-import {Setup} from "./utils/Setup.sol";
+import {ERC20, Setup} from "./utils/Setup.sol";
 
-import {StrategyAprOracle} from "../periphery/StrategyAprOracle.sol";
+import {SimpleLlamaLendOracle} from "../periphery/StrategyAprOracle.sol";
+
+interface ICurveVault {
+    function collateral_token() external view returns (address);
+}
 
 contract OracleTest is Setup {
-    StrategyAprOracle public oracle;
+    SimpleLlamaLendOracle public oracle;
 
     function setUp() public override {
         super.setUp();
-        oracle = new StrategyAprOracle();
+        oracle = new SimpleLlamaLendOracle();
     }
 
-    function checkOracle(address _strategy, uint256 _delta) public {
+    function checkOracle(
+        address _strategy,
+        uint256 _delta
+    ) public returns (uint256 currentApr) {
         // Check set up
         // TODO: Add checks for the setup
 
-        uint256 currentApr = oracle.aprAfterDebtChange(_strategy, 0);
+        currentApr = oracle.aprAfterDebtChange(_strategy, int256(_delta));
 
         // Should be greater than 0 but likely less than 100%
         assertGt(currentApr, 0, "ZERO");
@@ -57,6 +64,25 @@ contract OracleTest is Setup {
         uint256 _delta = (_amount * _percentChange) / MAX_BPS;
 
         checkOracle(address(strategy), _delta);
+    }
+
+    function test_oracle_constant() public {
+        console2.log(
+            "Collateral asset",
+            ERC20(ICurveVault(strategy.vault()).collateral_token()).name()
+        );
+        mintAndDepositIntoStrategy(strategy, user, 1e18);
+
+        uint256 strategyApr = checkOracle(address(strategy), 0);
+        console2.log("APR from oracle: %e", strategyApr);
+        (uint256 baseApr, uint256 boost, uint256 finalApr) = oracle.getCrvApr(
+            address(strategy),
+            strategy.vault(),
+            0
+        );
+        console2.log("baseApr: %e", baseApr);
+        console2.log("boost: %e", boost);
+        console2.log("finalApr: %e", finalApr);
     }
 
     // TODO: Deploy multiple strategies with different tokens as `asset` to test against the oracle.

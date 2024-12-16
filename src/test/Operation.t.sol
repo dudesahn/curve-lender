@@ -84,6 +84,10 @@ contract OperationTest is Setup {
         uint256 roughApr = (((profit * 365) /
             (strategy.profitMaxUnlockTime() / 86400)) * 10_000) / _amount;
         console2.log("Rough APR from basic report:", roughApr, "BPS");
+        console2.log(
+            "Days to unlock profit:",
+            strategy.profitMaxUnlockTime() / 86400
+        );
 
         // Check return Values
         assertGe(profit, 0, "!profit");
