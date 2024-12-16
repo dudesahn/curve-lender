@@ -75,7 +75,7 @@ contract Setup is ExtendedTest, IEvents {
         decimals = asset.decimals();
 
         // set market/gauge variables
-        uint256 useMarket = 1;
+        uint256 useMarket = 0;
 
         if (useMarket == 0) {
             // wstETH

@@ -90,7 +90,7 @@ contract OperationTest is Setup {
         );
 
         // Check return Values
-        assertGe(profit, 0, "!profit");
+        assertGt(profit, 0, "!profit");
         assertEq(loss, 0, "!loss");
 
         // force a claim of CRV and/or our other rewards

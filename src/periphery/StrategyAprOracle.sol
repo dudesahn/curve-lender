@@ -87,7 +87,22 @@ contract SimpleLlamaLendOracle {
         address _strategy,
         int256 _delta
     ) external view returns (uint256) {
-        IVault vault = IVault(IStrategy(_strategy).vault());
+        address vault = IStrategy(_strategy).vault();
+
+        uint256 lend_apr = getLendingApr(vault, _delta);
+
+        uint256 rewardYield;
+        (, , rewardYield) = getCrvApr(_strategy, vault, _delta);
+
+        // Return total APR (native yield + reward yield)
+        return lend_apr + rewardYield;
+    }
+
+    function getLendingApr(
+        address _vault,
+        int256 _delta
+    ) public view returns (uint256 lend_apr) {
+        IVault vault = IVault(_vault);
 
         // Step 1: Calculate native yield
         uint256 assets = vault.totalAssets();
@@ -101,15 +116,11 @@ contract SimpleLlamaLendOracle {
         // debt: uint256 = self.controller.total_debt()
         // self.amm.rate() * (365 * 86400) * debt / self._total_assets()
 
-        uint256 lend_apr = (ICurvePeriphery(vault.amm()).rate() *
-            (365 * 86400) *
-            ICurvePeriphery(vault.controller()).total_debt()) / assets;
-
-        uint256 rewardYield;
-        (, , rewardYield) = getCrvApr(_strategy, address(vault), _delta);
-
-        // Return total APR (native yield + reward yield)
-        return lend_apr + rewardYield;
+        lend_apr =
+            (ICurvePeriphery(vault.amm()).rate() *
+                (365 * 86400) *
+                ICurvePeriphery(vault.controller()).total_debt()) /
+            assets;
     }
 
     function getCrvApr(
@@ -132,10 +143,11 @@ contract SimpleLlamaLendOracle {
             return (0, 1e18, 0);
         }
 
-        // pull current balances
+        // pull current values
         uint256 voterGaugeBalance = gauge.balanceOf(YEARN_VOTER);
         uint256 currentWorkingBalance = gauge.working_balances(YEARN_VOTER);
         uint256 totalSupply = gauge.totalSupply();
+        uint256 currentWorkingSupply = gauge.working_supply();
 
         // adjust our voter gauge balance based on delta
         if (_delta < 0) {
@@ -152,8 +164,9 @@ contract SimpleLlamaLendOracle {
             1e18
         );
 
+        // *** NONE OF THE CURVE METRICS SEEM TO RESPOND TO CHANGES IN TVL. JK, THEY GO THE WRONG WAY (boost does)
+
         // we need to calculate working_balances from scratch to factor potential changes
-        uint256 currentWorkingSupply = gauge.working_supply();
         uint256 futureWorkingBalance = (voterGaugeBalance * 40) /
             100 +
             (totalSupply * IGauge(VE_CRV).balanceOf(YEARN_VOTER) * 60) /
@@ -171,9 +184,13 @@ contract SimpleLlamaLendOracle {
                 futureWorkingSupply) * gaugeWeight) /
             (vault.pricePerShare() * 25);
 
-        boost =
-            (futureWorkingBalance * 25 * 1e18) /
-            (10 * gauge.balanceOf(YEARN_VOTER));
+        if (voterGaugeBalance == 0) {
+            boost = 2.5e18;
+        } else {
+            boost =
+                (futureWorkingBalance * 25 * 1e18) /
+                (10 * voterGaugeBalance);
+        }
 
         finalApr = (baseApr * boost) / 1e18;
     }
