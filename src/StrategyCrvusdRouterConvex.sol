@@ -11,45 +11,49 @@ import {ICurveStrategyProxy, IGauge} from "./interfaces/ICrvusdInterfaces.sol";
 
 // think about adding some testing for when markets are fully utilized? got it simulated a bit w/ wstETH, seemed fine
 
-contract StrategyLlamaLendCurve is Base4626Compounder, TradeFactorySwapper {
+contract StrategyLlamaLendConvex is Base4626Compounder, TradeFactorySwapper {
     using SafeERC20 for ERC20;
 
-    struct RewardsInfo {
-        /// @notice Whether we should claim CRV rewards
-        bool claimCrv;
-        /// @notice Whether we should claim extra rewards
-        bool claimExtra;
-    }
+    /// @notice This is the deposit contract that all Convex pools use, aka booster.
+    IConvexBooster public immutable booster;
 
-    /// @notice Yearns strategyProxy, needed for interacting with our Curve Voter.
-    ICurveStrategyProxy public proxy;
+    /// @notice This is unique to each pool and holds the rewards.
+    IConvexRewards public immutable rewardsContract;
 
-    // Curve gauge address corresponding to our Curve Lend LP
-    address public immutable gauge;
-
-    // yChad, the only one who can update our strategy proxy address
-    address internal constant GOV = 0xFEB4acf3df3cDEA7399794D0869ef76A6EfAff52;
-
-    /// @notice Info about our rewards. See struct NatSpec for more details.
-    RewardsInfo public rewardsInfo;
+    /// @notice This is a unique numerical identifier for each Convex pool.
+    uint256 public immutable pid;
 
     /**
      * @param _asset Underlying asset to use for this strategy.
      * @param _name Name to use for this strategy. Ideally something human readable for a UI to use.
      * @param _vault ERC4626 vault token to use. In Curve Lend, these are the base LP tokens.
-     * @param _gauge Gauge address for the Curve Lend LP.
-     * @param _proxy Address for Yearn's strategy proxy.
+     * @param _pid PID for our Convex pool.
+     * @param _booster Address for Convex's booster.
      */
     constructor(
         address _asset,
         string memory _name,
         address _vault,
-        address _gauge,
-        address _proxy
+        uint256 _pid,
+        address _booster
     ) Base4626Compounder(_asset, _name, _vault) {
-        require(_vault == IGauge(_gauge).lp_token(), "gauge mismatch");
-        gauge = _gauge;
-        proxy = ICurveStrategyProxy(_proxy);
+        // ideally this booster value is pre-filled using a factory (specific to each chain)
+        booster = IConvexBooster(_booster);
+
+        // pid is specific to each pool
+        pid = _pid;
+
+        // use our pid to pull the corresponding rewards contract and LP token
+        (address lptoken, , , address _rewardsContract, , ) = booster.poolInfo(
+            _pid
+        );
+        rewardsContract = IConvexRewards(_rewardsContract);
+
+        // make sure we used the correct pid for our llama lend vault
+        require(_vault == lptoken, "wrong pid");
+
+        // approve LP deposits on the booster
+        ERC20(_vault).forceApprove(_booster, type(uint256).max);
     }
 
     /* ========== BASE4626 FUNCTIONS ========== */
@@ -58,18 +62,17 @@ contract StrategyLlamaLendCurve is Base4626Compounder, TradeFactorySwapper {
      * @notice Balance of 4626 vault tokens held in our strategy proxy
      */
     function balanceOfStake() public view override returns (uint256 stake) {
-        stake = proxy.balanceOf(gauge);
+        stake = rewardsContract.balanceOf(address(this));
     }
 
     function _stake() internal override {
-        // send any loose 4626 vault tokens to yearn's proxy to deposit to the gauge and send to the voter
-        ERC20(address(vault)).safeTransfer(address(proxy), balanceOfVault());
-        proxy.deposit(gauge, address(vault));
+        // send any loose 4626 vault tokens to convex
+        booster.deposit(pid, balanceOfVault(), true);
     }
 
     function _unStake(uint256 _amount) internal override {
         // _amount is already in 4626 vault shares, no need to convert from asset
-        proxy.withdraw(gauge, address(vault), _amount);
+        rewardsContract.withdrawAndUnwrap(_amount, false);
     }
 
     function vaultsMaxWithdraw() public view override returns (uint256) {
@@ -84,11 +87,6 @@ contract StrategyLlamaLendCurve is Base4626Compounder, TradeFactorySwapper {
             );
     }
 
-    // NOTE: only include this if we want to claim CRV on every report()
-    //function _claimAndSellRewards() internal override {
-    //    _claimRewards();
-    //}
-
     /* ========== TRADE FACTORY FUNCTIONS ========== */
 
     function claimRewards() external override onlyManagement {
@@ -96,17 +94,7 @@ contract StrategyLlamaLendCurve is Base4626Compounder, TradeFactorySwapper {
     }
 
     function _claimRewards() internal override {
-        RewardsInfo memory rewards = rewardsInfo;
-        if (rewards.claimCrv) {
-            proxy.harvest(gauge);
-        }
-
-        // claim any extra rewards we may have beyond CRV
-        if (rewards.claimExtra) {
-            // technically we shouldn't pass CRV here, but since we know llama lend uses
-            //  newer gauges, this won't be an issue in practice
-            proxy.claimManyRewards(gauge, rewardTokens());
-        }
+        rewardsContract.getReward(address(this), true);
     }
 
     /**
@@ -138,31 +126,5 @@ contract StrategyLlamaLendCurve is Base4626Compounder, TradeFactorySwapper {
      */
     function setTradeFactory(address _tradeFactory) external onlyManagement {
         _setTradeFactory(_tradeFactory, address(asset));
-    }
-
-    /* ========== PERMISSIONED FUNCTIONS ========== */
-
-    /**
-     * @notice Use to set whether we claim CRV and/or extra rewards.
-     * @dev Can only be called by management.
-     * @param _claimCrv Flag to claim CRV rewards.
-     * @param _claimExtra Flag to claim extra gauge rewards.
-     */
-    function setClaimFlags(
-        bool _claimCrv,
-        bool _claimExtra
-    ) external onlyManagement {
-        rewardsInfo.claimCrv = _claimCrv;
-        rewardsInfo.claimExtra = _claimExtra;
-    }
-
-    /**
-     * @notice Use this to set or update our strategy proxy.
-     * @dev Only governance can set this.
-     * @param _strategyProxy Address of our curve strategy proxy.
-     */
-    function setProxy(address _strategyProxy) external {
-        require(msg.sender == GOV, "!gov");
-        proxy = ICurveStrategyProxy(_strategyProxy);
     }
 }
