@@ -33,6 +33,9 @@ contract Setup is ExtendedTest, IEvents {
     address public management = address(1);
     address public performanceFeeRecipient = address(3);
     address public constant chad = 0xFEB4acf3df3cDEA7399794D0869ef76A6EfAff52;
+    
+    // whether we test our curve or convex strategy
+    bool public testConvex;
 
     // addresses for deployment
     address public curveLendVault;
@@ -76,6 +79,7 @@ contract Setup is ExtendedTest, IEvents {
 
         // set market/gauge variables
         uint256 useMarket = 3;
+        testConvex;
 
         if (useMarket == 0) {
             // wstETH
@@ -168,18 +172,33 @@ contract Setup is ExtendedTest, IEvents {
     }
 
     function setUpStrategy() public returns (address) {
-        // we save the strategy as a IStrategyInterface to give it the needed interface
-        IStrategyInterface _strategy = IStrategyInterface(
-            address(
-                new StrategyCrvusdRouter(
-                    address(asset),
-                    "Curve Boosted crvUSD-sDOLA Lender",
-                    curveLendVault,
-                    curveLendGauge,
-                    address(strategyProxy)
+        if (testConvex) {
+            // we save the strategy as a IStrategyInterface to give it the needed interface
+            IStrategyInterface _strategy = IStrategyInterface(
+                address(
+                    new StrategyLlamaLendConvex(
+                        address(asset),
+                        "Curve Boosted crvUSD-sDOLA Lender",
+                        curveLendVault,
+                        curveLendGauge,
+                        address(strategyProxy)
+                    )
                 )
-            )
-        );
+            );
+        } else {
+            // we save the strategy as a IStrategyInterface to give it the needed interface
+            IStrategyInterface _strategy = IStrategyInterface(
+                address(
+                    new StrategyCrvusdRouter(
+                        address(asset),
+                        "Curve Boosted crvUSD-sDOLA Lender",
+                        curveLendVault,
+                        curveLendGauge,
+                        address(strategyProxy)
+                    )
+                )
+            );
+        }
 
         // set keeper
         _strategy.setKeeper(keeper);

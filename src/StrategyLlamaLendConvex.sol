@@ -5,26 +5,49 @@ import {Base4626Compounder, ERC20, SafeERC20, Math} from "@periphery/Bases/4626C
 import {TradeFactorySwapper} from "@periphery/swappers/TradeFactorySwapper.sol";
 import {ICurveStrategyProxy, IGauge} from "./interfaces/ICrvusdInterfaces.sol";
 
-contract StrategyLlamaLendCurveL2 is Base4626Compounder, TradeFactorySwapper {
+contract StrategyLlamaLendConvex is Base4626Compounder, TradeFactorySwapper {
     using SafeERC20 for ERC20;
 
-    // @notice Curve gauge address corresponding to our Curve Lend LP
-    IGauge public immutable gauge;
+    /// @notice This is the deposit contract that all Convex pools use, aka booster.
+    IConvexBooster public immutable booster;
+
+    /// @notice This is unique to each pool and holds the rewards.
+    IConvexRewards public immutable rewardsContract;
+
+    /// @notice This is a unique numerical identifier for each Convex pool.
+    uint256 public immutable pid;
 
     /**
      * @param _asset Underlying asset to use for this strategy.
      * @param _name Name to use for this strategy. Ideally something human readable for a UI to use.
      * @param _vault ERC4626 vault token to use. In Curve Lend, these are the base LP tokens.
-     * @param _gauge Gauge address for the Curve Lend LP.
+     * @param _pid PID for our Convex pool.
+     * @param _booster Address for Convex's booster.
      */
     constructor(
         address _asset,
         string memory _name,
         address _vault,
-        address _gauge
+        uint256 _pid,
+        address _booster
     ) Base4626Compounder(_asset, _name, _vault) {
-        require(_vault == IGauge(_gauge).lp_token(), "gauge mismatch");
-        gauge = _gauge;
+        // ideally this booster value is pre-filled using a factory (specific to each chain)
+        booster = IConvexBooster(_booster);
+
+        // pid is specific to each pool
+        pid = _pid;
+
+        // use our pid to pull the corresponding rewards contract and LP token
+        (address lptoken, , , address _rewardsContract, , ) = booster.poolInfo(
+            _pid
+        );
+        rewardsContract = IConvexRewards(_rewardsContract);
+
+        // make sure we used the correct pid for our llama lend vault
+        require(_vault == lptoken, "wrong pid");
+
+        // approve LP deposits on the booster
+        ERC20(_vault).forceApprove(_booster, type(uint256).max);
     }
 
     /* ========== BASE4626 FUNCTIONS ========== */
@@ -33,17 +56,17 @@ contract StrategyLlamaLendCurveL2 is Base4626Compounder, TradeFactorySwapper {
      * @notice Balance of 4626 vault tokens held in our strategy proxy
      */
     function balanceOfStake() public view override returns (uint256 stake) {
-        stake = gauge.balanceOf(address(this));
+        stake = rewardsContract.balanceOf(address(this));
     }
 
     function _stake() internal override {
-        // stake any loose 4626 vault tokens to the gauge
-        gauge.deposit(balanceOfVault());
+        // send any loose 4626 vault tokens to convex
+        booster.deposit(pid, balanceOfVault(), true);
     }
 
     function _unStake(uint256 _amount) internal override {
         // _amount is already in 4626 vault shares, no need to convert from asset
-        gauge.withdraw(_amount);
+        rewardsContract.withdrawAndUnwrap(_amount, false);
     }
 
     function vaultsMaxWithdraw() public view override returns (uint256) {
@@ -52,7 +75,7 @@ contract StrategyLlamaLendCurveL2 is Base4626Compounder, TradeFactorySwapper {
         return
             vault.convertToAssets(
                 Math.min(
-                    vault.maxRedeem(address(gauge)),
+                    vault.maxRedeem(gauge),
                     balanceOfStake() + balanceOfVault()
                 )
             );
@@ -65,8 +88,7 @@ contract StrategyLlamaLendCurveL2 is Base4626Compounder, TradeFactorySwapper {
     }
 
     function _claimRewards() internal override {
-        // claim any extra rewards we may have
-        gauge.claim_rewards();
+        rewardsContract.getReward(address(this), true);
     }
 
     /**
