@@ -19,7 +19,7 @@ contract OperationTest is Setup {
         // TODO: add additional check on strat params
     }
 
-    function test_operation(uint256 _amount) public {
+    function test_operation_fuzzy(uint256 _amount) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
 
         // Deposit into strategy
@@ -42,9 +42,31 @@ contract OperationTest is Setup {
 
         uint256 balanceBefore = asset.balanceOf(user);
 
-        // Withdraw all funds
-        vm.prank(user);
-        strategy.redeem(_amount, user, user);
+        // check if we're at full utilization
+        if (strategy.totalAssets() > strategy.availableWithdrawLimit(user)) {
+            // Withdraw all funds, or at least as much as we expect to be free
+            // make sure to use maxWithdraw for our users, NOT availableWithdrawLimit
+            // the latter is for the whole vault, not by user
+            uint256 userToWithdraw = strategy.maxWithdraw(user);
+            vm.prank(user);
+            strategy.withdraw(userToWithdraw, user, user);
+
+            // check and make sure that our user still holds some amount of strategy tokens
+            uint256 totalUserShare = (_amount *
+                1e18 *
+                strategy.pricePerShare()) / 1e36;
+            uint256 recreatedUserShare = userToWithdraw +
+                (strategy.balanceOf(user) * 1e18 * strategy.pricePerShare()) /
+                1e36;
+            // if _amount is too low, we may have issues with rounding here
+            if (_amount > 1e18) {
+                assertApproxEqAbs(totalUserShare, recreatedUserShare, 1e18);
+            }
+        } else {
+            // Withdraw all funds
+            vm.prank(user);
+            strategy.redeem(_amount, user, user);
+        }
 
         assertGe(
             asset.balanceOf(user),
@@ -109,28 +131,51 @@ contract OperationTest is Setup {
         );
 
         // Check return Values
-        assertGe(profitTwo, 0, "!profit");
+        assertGt(profitTwo, 0, "!profit");
         assertEq(lossTwo, 0, "!loss");
         assertGt(profitTwo, profit, "!profitComp");
 
+        // fully unlock our profit
+        skip(strategy.profitMaxUnlockTime());
+
         uint256 balanceBefore = asset.balanceOf(user);
 
-        // Withdraw all funds
-        vm.prank(user);
-        strategy.redeem(_amount, user, user);
+        // check if we're at full utilization
+        if (strategy.totalAssets() > strategy.availableWithdrawLimit(user)) {
+            // Withdraw all funds, or at least as much as we expect to be free
+            // make sure to use maxWithdraw for our users, NOT availableWithdrawLimit
+            // the latter is for the whole vault, not by user
+            uint256 userToWithdraw = strategy.maxWithdraw(user);
+            vm.prank(user);
+            strategy.withdraw(userToWithdraw, user, user);
 
-        assertGe(
+            // check and make sure that our user still holds some amount of strategy tokens
+            uint256 totalUserShare = (_amount *
+                1e18 *
+                strategy.pricePerShare()) / 1e36;
+            uint256 recreatedUserShare = userToWithdraw +
+                (strategy.balanceOf(user) * 1e18 * strategy.pricePerShare()) /
+                1e36;
+            assertApproxEqAbs(totalUserShare, recreatedUserShare, 1e18);
+        } else {
+            // Withdraw all funds
+            vm.prank(user);
+            strategy.redeem(_amount, user, user);
+        }
+
+        assertGt(
             asset.balanceOf(user),
             balanceBefore + _amount,
             "!final balance"
         );
     }
 
-    function test_profitableReport(
+    function test_profitableReport_NoFees(
         uint256 _amount,
         uint16 _profitFactor
     ) public {
-        vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
+        // use a higher amount so we always record actual profits
+        vm.assume(_amount > 1e18 && _amount < maxFuzzAmount);
 
         // since our lender is default profitable, doing max 10_000 will revert w/ health check
         //  (more than 100% total profit). so do 9950 to give some buffer for the interest earned.
@@ -159,18 +204,37 @@ contract OperationTest is Setup {
         (uint256 profit, uint256 loss) = strategy.report();
 
         // Check return Values
-        assertGe(profit, toAirdrop, "!profit");
+        assertGt(profit, toAirdrop, "!profit");
         assertEq(loss, 0, "!loss");
 
         skip(strategy.profitMaxUnlockTime());
 
         uint256 balanceBefore = asset.balanceOf(user);
 
-        // Withdraw all funds
-        vm.prank(user);
-        strategy.redeem(_amount, user, user);
+        // check if we're at full utilization
+        if (strategy.totalAssets() > strategy.availableWithdrawLimit(user)) {
+            // Withdraw all funds, or at least as much as we expect to be free
+            // make sure to use maxWithdraw for our users, NOT availableWithdrawLimit
+            // the latter is for the whole vault, not by user
+            uint256 userToWithdraw = strategy.maxWithdraw(user);
+            vm.prank(user);
+            strategy.withdraw(userToWithdraw, user, user);
 
-        assertGe(
+            // check and make sure that our user still holds some amount of strategy tokens
+            uint256 totalUserShare = (_amount *
+                1e18 *
+                strategy.pricePerShare()) / 1e36;
+            uint256 recreatedUserShare = userToWithdraw +
+                (strategy.balanceOf(user) * 1e18 * strategy.pricePerShare()) /
+                1e36;
+            assertApproxEqAbs(totalUserShare, recreatedUserShare, 1e18);
+        } else {
+            // Withdraw all funds
+            vm.prank(user);
+            strategy.redeem(_amount, user, user);
+        }
+
+        assertGt(
             asset.balanceOf(user),
             balanceBefore + _amount,
             "!final balance"
@@ -181,7 +245,8 @@ contract OperationTest is Setup {
         uint256 _amount,
         uint16 _profitFactor
     ) public {
-        vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
+        // use a higher amount so we always record actual profits
+        vm.assume(_amount > 1e18 && _amount < maxFuzzAmount);
 
         // since our lender is default profitable, doing max 10_000 will revert w/ health check
         //  (more than 100% total profit). so do 9950 to give some buffer for the interest earned.
@@ -207,7 +272,7 @@ contract OperationTest is Setup {
         (uint256 profit, uint256 loss) = strategy.report();
 
         // Check return Values
-        assertGe(profit, toAirdrop, "!profit");
+        assertGt(profit, toAirdrop, "!profit");
         assertEq(loss, 0, "!loss");
 
         skip(strategy.profitMaxUnlockTime());
@@ -219,30 +284,53 @@ contract OperationTest is Setup {
 
         uint256 balanceBefore = asset.balanceOf(user);
 
-        // Withdraw all funds
-        vm.prank(user);
-        strategy.redeem(_amount, user, user);
+        // check if we're at full utilization
+        if (strategy.totalAssets() > strategy.availableWithdrawLimit(user)) {
+            // Withdraw all funds, or at least as much as we expect to be free
+            // make sure to use maxWithdraw for our users, NOT availableWithdrawLimit
+            // the latter is for the whole vault, not by user
+            uint256 userToWithdraw = strategy.maxWithdraw(user);
+            vm.prank(user);
+            strategy.withdraw(userToWithdraw, user, user);
 
-        assertGe(
+            // check and make sure that our user still holds some amount of strategy tokens
+            uint256 totalUserShare = (_amount *
+                1e18 *
+                strategy.pricePerShare()) / 1e36;
+            uint256 recreatedUserShare = userToWithdraw +
+                (strategy.balanceOf(user) * 1e18 * strategy.pricePerShare()) /
+                1e36;
+            assertApproxEqAbs(totalUserShare, recreatedUserShare, 1e18);
+        } else {
+            // Withdraw all funds
+            vm.prank(user);
+            strategy.redeem(_amount, user, user);
+        }
+
+        assertGt(
             asset.balanceOf(user),
             balanceBefore + _amount,
             "!final balance"
         );
 
-        vm.prank(performanceFeeRecipient);
-        strategy.redeem(
-            expectedShares,
-            performanceFeeRecipient,
-            performanceFeeRecipient
-        );
-
-        checkStrategyTotals(strategy, 0, 0, 0);
-
-        assertGe(
-            asset.balanceOf(performanceFeeRecipient),
-            expectedShares,
-            "!perf fee out"
-        );
+        // check if we're at full utilization
+        if (
+            strategy.maxWithdraw(performanceFeeRecipient) >
+            strategy.totalAssets()
+        ) {
+            vm.prank(performanceFeeRecipient);
+            strategy.redeem(
+                expectedShares,
+                performanceFeeRecipient,
+                performanceFeeRecipient
+            );
+            checkStrategyTotals(strategy, 0, 0, 0);
+            assertGe(
+                asset.balanceOf(performanceFeeRecipient),
+                expectedShares,
+                "!perf fee out"
+            );
+        }
     }
 
     function test_tendTrigger(uint256 _amount) public {
@@ -263,6 +351,7 @@ contract OperationTest is Setup {
         (trigger, ) = strategy.tendTrigger();
         assertTrue(!trigger);
 
+        // Report profit
         vm.prank(keeper);
         strategy.report();
 
@@ -275,8 +364,31 @@ contract OperationTest is Setup {
         (trigger, ) = strategy.tendTrigger();
         assertTrue(!trigger);
 
-        vm.prank(user);
-        strategy.redeem(_amount, user, user);
+        // check if we're at full utilization
+        if (strategy.totalAssets() > strategy.availableWithdrawLimit(user)) {
+            // Withdraw all funds, or at least as much as we expect to be free
+            // make sure to use maxWithdraw for our users, NOT availableWithdrawLimit
+            // the latter is for the whole vault, not by user
+            uint256 userToWithdraw = strategy.maxWithdraw(user);
+            vm.prank(user);
+            strategy.withdraw(userToWithdraw, user, user);
+
+            // check and make sure that our user still holds some amount of strategy tokens
+            uint256 totalUserShare = (_amount *
+                1e18 *
+                strategy.pricePerShare()) / 1e36;
+            uint256 recreatedUserShare = userToWithdraw +
+                (strategy.balanceOf(user) * 1e18 * strategy.pricePerShare()) /
+                1e36;
+            // if _amount is too low, we may have issues with rounding here
+            if (_amount > 1e18) {
+                assertApproxEqAbs(totalUserShare, recreatedUserShare, 1e18);
+            }
+        } else {
+            // Withdraw all funds
+            vm.prank(user);
+            strategy.redeem(_amount, user, user);
+        }
 
         (trigger, ) = strategy.tendTrigger();
         assertTrue(!trigger);

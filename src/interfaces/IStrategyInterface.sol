@@ -10,4 +10,6 @@ interface IStrategyInterface is IBase4626Compounder, ITradeFactorySwapper {
     function addToken(address) external;
 
     function setTradeFactory(address) external;
+
+    function setClaimFlags(bool, bool) external;
 }

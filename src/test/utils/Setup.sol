@@ -75,7 +75,7 @@ contract Setup is ExtendedTest, IEvents {
         decimals = asset.decimals();
 
         // set market/gauge variables
-        uint256 useMarket = 0;
+        uint256 useMarket = 3;
 
         if (useMarket == 0) {
             // wstETH
@@ -96,7 +96,7 @@ contract Setup is ExtendedTest, IEvents {
             strategyV2.harvest();
             vm.stopPrank();
         } else if (useMarket == 1) {
-            // sDOLA (should not revert)
+            // sDOLA
             curveLendVault = 0x14361C243174794E2207296a6AD59bb0Dec1d388;
             curveLendGauge = 0x30e06CADFbC54d61B7821dC1e58026bf3435d2Fe;
         } else if (useMarket == 2) {
@@ -109,6 +109,14 @@ contract Setup is ExtendedTest, IEvents {
             // sUSDe (vault exists for it, but is empty, so nothing else needed to do)
             curveLendVault = 0x4a7999c55d3a93dAf72EA112985e57c2E3b9e95D;
             curveLendGauge = 0xAE1680Ef5EFc2486E73D8d5D0f8a8dB77DA5774E;
+        } else if (useMarket == 4) {
+            // USD0 (tiny TVL, not approved on gauge controller)
+            curveLendVault = 0x0111646E459e0BBa57daCA438262f3A092ae24C6;
+            curveLendGauge = 0x1d701D23CE74d5B721d24D668A79c44Db2D5A0AE;
+        } else if (useMarket == 5) {
+            // ynETH (fully empty)
+            curveLendVault = 0xC6F7E164ed085b68d5DF20d264f70410CB0B7458;
+            curveLendGauge = 0xe9cA32785e192abD1bcF4e9fa0160Dc47E93ED89;
         }
 
         // Deploy strategy and set variables
@@ -120,6 +128,33 @@ contract Setup is ExtendedTest, IEvents {
 
         // add our new strategy to the voter proxy
         setUpProxy();
+
+        // setup rewards claiming
+        if (useMarket == 0) {
+            // wstETH
+            vm.prank(management);
+            strategy.setClaimFlags(true, false);
+        } else if (useMarket == 1) {
+            // sDOLA
+            vm.prank(management);
+            strategy.setClaimFlags(true, false);
+        } else if (useMarket == 2) {
+            // UwU (use to test gauges with extra incentives). approved on gauge controller but no emissions currently
+            vm.prank(management);
+            strategy.setClaimFlags(false, true);
+        } else if (useMarket == 3) {
+            // sUSDe (vault exists for it, but is empty, so nothing else needed to do)
+            vm.prank(management);
+            strategy.setClaimFlags(true, false);
+        } else if (useMarket == 4) {
+            // USD0 (tiny TVL, not approved on gauge controller)
+            vm.prank(management);
+            strategy.setClaimFlags(false, false);
+        } else if (useMarket == 5) {
+            // ynETH (fully empty, not approved on gauge controller)
+            vm.prank(management);
+            strategy.setClaimFlags(false, false);
+        }
 
         // label all the used addresses for traces
         vm.label(user, "user");

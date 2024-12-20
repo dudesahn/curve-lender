@@ -143,9 +143,12 @@ contract OracleTest is Setup {
         // The apr should go up if deposits go down
         assertLt(strategyApr, negativeDebtChangeApr, "negative change");
         assertLt(lendingApr, negativeLendingApr, "negative change");
-        assertLt(baseCrvApr, negativebaseCrvApr, "negative change");
-        assertLt(boost, negativeBoost, "negative change");
-        assertLt(boostedCrvApr, negativeboostedCrvApr, "negative change");
+        if (baseCrvApr > 0) {
+            // don't check these if no CRV emissions
+            assertLt(baseCrvApr, negativebaseCrvApr, "negative change");
+            assertLe(boost, negativeBoost, "negative change"); // boost could stay fully boosted
+            assertLt(boostedCrvApr, negativeboostedCrvApr, "negative change");
+        }
     }
 
     function test_oracle_constant_increase_debt() public {
@@ -195,9 +198,12 @@ contract OracleTest is Setup {
         // The apr should go down if deposits go up
         assertGt(strategyApr, positiveDebtChangeApr, "positive change");
         assertGt(lendingApr, positiveLendingApr, "positive change");
-        assertGt(baseCrvApr, positivebaseCrvApr, "positive change");
-        assertGt(boost, positiveBoost, "positive change");
-        assertGt(boostedCrvApr, positiveboostedCrvApr, "positive change");
+        if (baseCrvApr > 0) {
+            // don't check these if no CRV emissions
+            assertGt(baseCrvApr, positivebaseCrvApr, "positive change");
+            assertGe(boost, positiveBoost, "positive change"); // boost could stay fully boosted
+            assertGt(boostedCrvApr, positiveboostedCrvApr, "positive change");
+        }
     }
 
     // TODO: Deploy multiple strategies with different tokens as `asset` to test against the oracle.

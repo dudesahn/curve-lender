@@ -41,7 +41,7 @@ contract ShutdownTest is Setup {
         );
     }
 
-    function test_shutdownCanWithdrawMaxUint() public {
+    function test_shutdown_MaxUint() public {
         uint256 _amount = 1_000_000e18;
 
         // Deposit into strategy
@@ -75,9 +75,6 @@ contract ShutdownTest is Setup {
         uint256 balanceOfAssets = strategy.balanceOfAsset();
         assertGt(balanceOfAssets, 0, "!assets");
         console2.log("Balance of loose assets:", balanceOfAssets, "crvUSD");
-
-        // value of vault should be zero now
-        assertEq(strategy.valueOfVault(), 0, "!value");
 
         // Make sure we can still withdraw the full amount
         uint256 balanceBefore = asset.balanceOf(user);

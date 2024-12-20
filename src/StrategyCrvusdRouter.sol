@@ -9,8 +9,17 @@ import {ICurveStrategyProxy, IGauge} from "./interfaces/ICrvusdInterfaces.sol";
 // OR MAYBE WE JUST ALSO WRITE A STRATEGY VERSION FOR THOSE
 // a bit worried this will revert somewhere in strategy proxy or something
 
+// think about adding some testing for when markets are fully utilized? got it simulated a bit w/ wstETH, seemed fine
+
 contract StrategyCrvusdRouter is Base4626Compounder, TradeFactorySwapper {
     using SafeERC20 for ERC20;
+
+    struct RewardsInfo {
+        /// @notice Whether we should claim CRV rewards
+        bool claimCrv;
+        /// @notice Whether we should claim extra rewards
+        bool claimExtra;
+    }
 
     /// @notice Yearns strategyProxy, needed for interacting with our Curve Voter.
     ICurveStrategyProxy public proxy;
@@ -20,6 +29,9 @@ contract StrategyCrvusdRouter is Base4626Compounder, TradeFactorySwapper {
 
     // yChad, the only one who can update our strategy proxy address
     address internal constant GOV = 0xFEB4acf3df3cDEA7399794D0869ef76A6EfAff52;
+
+    /// @notice Info about our rewards. See struct NatSpec for more details.
+    RewardsInfo public rewardsInfo;
 
     /**
      * @param _asset Underlying asset to use for this strategy.
@@ -57,17 +69,18 @@ contract StrategyCrvusdRouter is Base4626Compounder, TradeFactorySwapper {
 
     function _unStake(uint256 _amount) internal override {
         // _amount is already in 4626 vault shares, no need to convert from asset
-        // ** NOTE make sure _amount can't be more than balanceOfStake()
-        require(_amount < balanceOfStake(), "!conversion");
         proxy.withdraw(gauge, address(vault), _amount);
     }
 
     function vaultsMaxWithdraw() public view override returns (uint256) {
         // we use the gauge address here since that's where our strategy proxy deposits the LP
-        // should be the minimum of what the gauge can redeem (limited by utilization), and our staked balance
+        // should be the minimum of what the gauge can redeem (limited by utilization), and our staked balance + loose vault tokens
         return
             vault.convertToAssets(
-                Math.min(vault.maxRedeem(gauge), balanceOfStake())
+                Math.min(
+                    vault.maxRedeem(gauge),
+                    balanceOfStake() + balanceOfVault()
+                )
             );
     }
 
@@ -83,11 +96,13 @@ contract StrategyCrvusdRouter is Base4626Compounder, TradeFactorySwapper {
     }
 
     function _claimRewards() internal override {
-        // ***** IF WE WANTED TO DO NON-CRV CLAIMS, PROBABLY PUT THIS BEHIND FLAG
-        proxy.harvest(gauge);
+        RewardsInfo memory rewards = rewardsInfo;
+        if (rewards.claimCrv) {
+            proxy.harvest(gauge);
+        }
 
         // claim any extra rewards we may have beyond CRV
-        if (rewardTokens().length > 1) {
+        if (rewards.claimExtra) {
             // technically we shouldn't pass CRV here, but since we know llama lend uses
             //  newer gauges, this won't be an issue in practice
             proxy.claimManyRewards(gauge, rewardTokens());
@@ -126,6 +141,20 @@ contract StrategyCrvusdRouter is Base4626Compounder, TradeFactorySwapper {
     }
 
     /* ========== PERMISSIONED FUNCTIONS ========== */
+
+    /**
+     * @notice Use to set whether we claim CRV and/or extra rewards.
+     * @dev Can only be called by management.
+     * @param _claimCrv Flag to claim CRV rewards.
+     * @param _claimExtra Flag to claim extra gauge rewards.
+     */
+    function setClaimFlags(
+        bool _claimCrv,
+        bool _claimExtra
+    ) external onlyManagement {
+        rewardsInfo.claimCrv = _claimCrv;
+        rewardsInfo.claimExtra = _claimExtra;
+    }
 
     /**
      * @notice Use this to set or update our strategy proxy.

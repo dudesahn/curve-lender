@@ -9,16 +9,10 @@ import {Math} from "@periphery/Bases/4626Compounder/Base4626Compounder.sol";
 interface IStrategy {
     function vault() external view returns (address);
 
-    function asset() external view returns (address);
-
     function gauge() external view returns (address);
 }
 
 interface IVault {
-    function convertToShares(uint256) external view returns (uint256);
-
-    function convertToAssets(uint256) external view returns (uint256);
-
     function pricePerShare() external view returns (uint256);
 
     function totalAssets() external view returns (uint256);
@@ -56,13 +50,6 @@ interface ICurvePool {
     ) external view returns (uint256);
 }
 
-interface IUniswapRouter {
-    function getAmountsOut(
-        uint256 amountIn,
-        address[] memory path
-    ) external view returns (uint256[] memory amounts);
-}
-
 contract SimpleLlamaLendOracle {
     address internal constant TRI_CRV_USD_CURVE_POOL =
         0x4eBdF703948ddCEA3B11f675B4D1Fba9d2414A14;
@@ -71,7 +58,7 @@ contract SimpleLlamaLendOracle {
         0x2F50D538606Fa9EDD2B11E2446BEb18C9D5846bB;
 
     address internal constant YEARN_VOTER =
-        0xF147b8125d2ef93FB6965Db97D6746952a133934;
+        0x2F50D538606Fa9EDD2B11E2446BEb18C9D5846bB;
 
     address internal constant VE_CRV =
         0x5f3b5DfEb7B28CDbD7FAba78963EE202a494e2A2;
