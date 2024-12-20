@@ -58,7 +58,7 @@ contract SimpleLlamaLendOracle {
         0x2F50D538606Fa9EDD2B11E2446BEb18C9D5846bB;
 
     address internal constant YEARN_VOTER =
-        0x2F50D538606Fa9EDD2B11E2446BEb18C9D5846bB;
+        0xF147b8125d2ef93FB6965Db97D6746952a133934;
 
     address internal constant VE_CRV =
         0x5f3b5DfEb7B28CDbD7FAba78963EE202a494e2A2;
@@ -150,8 +150,6 @@ contract SimpleLlamaLendOracle {
             0,
             1e18
         );
-
-        // *** NONE OF THE CURVE METRICS SEEM TO RESPOND TO CHANGES IN TVL. JK, THEY GO THE WRONG WAY (boost does)
 
         // we need to calculate working_balances from scratch to factor potential changes
         uint256 futureWorkingBalance = (voterGaugeBalance * 40) /
