@@ -72,9 +72,13 @@ contract Setup is ExtendedTest, IEvents {
     // Fuzz from $0.01 of 1e6 stable coins up to 1 trillion of a 1e18 coin
     uint256 public maxFuzzAmount = 1e30;
     uint256 public minFuzzAmount = 1e4;
+    uint256 public minAprOracleFuzzAmount = 1e18; // at tiny deposits, APR may not change enough to detect
 
     // Default profit max unlock time is set for 10 days
     uint256 public profitMaxUnlockTime = 1 days;
+
+    // state var to use in case we have very low or zero yield; some of our assumptions break
+    bool public noYield;
 
     function setUp() public virtual {
         _setTokenAddrs();
@@ -86,7 +90,7 @@ contract Setup is ExtendedTest, IEvents {
         decimals = asset.decimals();
 
         // set market/gauge variables
-        uint256 useMarket = 5;
+        uint256 useMarket = 6;
         useConvex = false;
 
         if (useMarket == 0) {
@@ -134,10 +138,12 @@ contract Setup is ExtendedTest, IEvents {
             // USD0 (tiny TVL, not approved on gauge controller). will revert for convex
             curveLendVault = 0x0111646E459e0BBa57daCA438262f3A092ae24C6;
             curveLendGauge = 0x1d701D23CE74d5B721d24D668A79c44Db2D5A0AE;
+            noYield = true;
         } else if (useMarket == 6) {
             // ynETH (fully empty). will revert for convex
             curveLendVault = 0xC6F7E164ed085b68d5DF20d264f70410CB0B7458;
             curveLendGauge = 0xe9cA32785e192abD1bcF4e9fa0160Dc47E93ED89;
+            noYield = true;
         }
 
         // Deploy strategy and set variables

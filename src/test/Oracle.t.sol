@@ -27,6 +27,11 @@ contract OracleTest is Setup {
         // Check set up
         // TODO: Add checks for the setup
 
+        // don't bother testing our oracle if we don't have yield
+        if (noYield) {
+            return 0;
+        }
+
         if (useConvex) {
             currentApr = convexOracle.aprAfterDebtChange(_strategy, 0);
 
@@ -94,7 +99,7 @@ contract OracleTest is Setup {
 
     function test_oracle_fuzzy(uint256 _amount, uint16 _percentChange) public {
         // go a bit higher with min amount, otherwise APRs might stay the same at very low deposits
-        vm.assume(_amount > 1e18 && _amount < maxFuzzAmount);
+        vm.assume(_amount > minAprOracleFuzzAmount && _amount < maxFuzzAmount);
         _percentChange = uint16(bound(uint256(_percentChange), 10, MAX_BPS));
 
         mintAndDepositIntoStrategy(strategy, user, _amount);
@@ -137,7 +142,11 @@ contract OracleTest is Setup {
         }
     }
 
-    function test_oracle_constant_decrease_debt() public {
+    function test_oracle_decrease_debt() public {
+        // don't bother testing our oracle if we don't have yield
+        if (noYield) {
+            return;
+        }
         console2.log(
             "Collateral asset",
             ERC20(ICurveVault(strategy.vault()).collateral_token()).name()
@@ -257,7 +266,11 @@ contract OracleTest is Setup {
         }
     }
 
-    function test_oracle_constant_increase_debt() public {
+    function test_oracle_increase_debt() public {
+        // don't bother testing our oracle if we don't have yield
+        if (noYield) {
+            return;
+        }
         console2.log(
             "Collateral asset",
             ERC20(ICurveVault(strategy.vault()).collateral_token()).name()

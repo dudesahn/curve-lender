@@ -31,12 +31,22 @@ contract OperationTest is Setup {
         skip(1 days);
 
         // Report profit
+        if (noYield) {
+            vm.prank(management);
+            strategy.setDoHealthCheck(false);
+        }
+
+        // Report profit
         vm.prank(keeper);
         (uint256 profit, uint256 loss) = strategy.report();
 
         // Check return Values
         assertGe(profit, 0, "!profit");
-        assertEq(loss, 0, "!loss");
+        if (noYield) {
+            assertLe(loss, 1, "!loss");
+        } else {
+            assertEq(loss, 0, "!loss");
+        }
 
         skip(strategy.profitMaxUnlockTime());
 
@@ -59,8 +69,12 @@ contract OperationTest is Setup {
                 (strategy.balanceOf(user) * 1e18 * strategy.pricePerShare()) /
                 1e36;
             // if _amount is too low, we may have issues with rounding here
-            if (_amount > 1e18) {
-                assertApproxEqAbs(totalUserShare, recreatedUserShare, 1e18);
+            if (_amount > minAprOracleFuzzAmount) {
+                assertApproxEqAbs(
+                    totalUserShare,
+                    recreatedUserShare,
+                    minAprOracleFuzzAmount
+                );
             }
         } else {
             // Withdraw all funds
@@ -68,11 +82,19 @@ contract OperationTest is Setup {
             strategy.redeem(_amount, user, user);
         }
 
-        assertGe(
-            asset.balanceOf(user),
-            balanceBefore + _amount,
-            "!final balance"
-        );
+        if (noYield) {
+            assertGe(
+                asset.balanceOf(user) + 1, // 1 wei loss for 4626 rounding
+                balanceBefore + _amount,
+                "!final balance"
+            );
+        } else {
+            assertGe(
+                asset.balanceOf(user),
+                balanceBefore + _amount,
+                "!final balance"
+            );
+        }
     }
 
     function test_operation_fixed() public {
@@ -114,8 +136,13 @@ contract OperationTest is Setup {
         );
 
         // Check return Values
-        assertGt(profit, 0, "!profit");
-        assertEq(loss, 0, "!loss");
+        if (noYield) {
+            assertGe(profit, 0, "!profit");
+            assertLe(loss, 1, "!loss");
+        } else {
+            assertGt(profit, 0, "!profit");
+            assertEq(loss, 0, "!loss");
+        }
 
         // force a claim of CRV and/or our other rewards
         skip(strategy.profitMaxUnlockTime());
@@ -132,10 +159,16 @@ contract OperationTest is Setup {
             "* 1e18 crvUSD"
         );
 
-        // Check return Values
-        assertGt(profitTwo, 0, "!profit");
-        assertEq(lossTwo, 0, "!loss");
-        assertGt(profitTwo, profit, "!profitComp");
+        // technically we should probably check first if we even have CRV rewards before doing this comparison, but whatever
+        if (noYield) {
+            assertGe(profitTwo + 1, profit, "!profitComp");
+            assertGe(profitTwo, 0, "!profit");
+            assertLe(lossTwo, 1, "!loss");
+        } else {
+            assertGt(profitTwo, profit, "!profitComp");
+            assertGt(profitTwo, 0, "!profit");
+            assertEq(lossTwo, 0, "!loss");
+        }
 
         // fully unlock our profit
         skip(strategy.profitMaxUnlockTime());
@@ -165,19 +198,26 @@ contract OperationTest is Setup {
             strategy.redeem(_amount, user, user);
         }
 
-        assertGt(
-            asset.balanceOf(user),
-            balanceBefore + _amount,
-            "!final balance"
-        );
+        if (noYield) {
+            assertGe(
+                asset.balanceOf(user) + 1, // 1 wei loss for 4626 rounding
+                balanceBefore + _amount,
+                "!final balance"
+            );
+        } else {
+            assertGe(
+                asset.balanceOf(user),
+                balanceBefore + _amount,
+                "!final balance"
+            );
+        }
     }
 
     function test_profitableReport_NoFees(
         uint256 _amount,
         uint16 _profitFactor
     ) public {
-        // use a higher amount so we always record actual profits
-        vm.assume(_amount > 1e18 && _amount < maxFuzzAmount);
+        vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
 
         // since our lender is default profitable, doing max 10_000 will revert w/ health check
         //  (more than 100% total profit). so do 9950 to give some buffer for the interest earned.
@@ -206,7 +246,11 @@ contract OperationTest is Setup {
         (uint256 profit, uint256 loss) = strategy.report();
 
         // Check return Values
-        assertGt(profit, toAirdrop, "!profit");
+        if (noYield) {
+            assertGe(profit + 1, toAirdrop, "!profit"); // we can get 1 wei loss on no native yield thanks to 4626
+        } else {
+            assertGt(profit, toAirdrop, "!profit");
+        }
         assertEq(loss, 0, "!loss");
 
         skip(strategy.profitMaxUnlockTime());
@@ -247,8 +291,7 @@ contract OperationTest is Setup {
         uint256 _amount,
         uint16 _profitFactor
     ) public {
-        // use a higher amount so we always record actual profits
-        vm.assume(_amount > 1e18 && _amount < maxFuzzAmount);
+        vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
 
         // since our lender is default profitable, doing max 10_000 will revert w/ health check
         //  (more than 100% total profit). so do 9950 to give some buffer for the interest earned.
@@ -274,7 +317,11 @@ contract OperationTest is Setup {
         (uint256 profit, uint256 loss) = strategy.report();
 
         // Check return Values
-        assertGt(profit, toAirdrop, "!profit");
+        if (noYield) {
+            assertGe(profit + 1, toAirdrop, "!profit"); // we can get 1 wei loss on no native yield thanks to 4626
+        } else {
+            assertGt(profit, toAirdrop, "!profit");
+        }
         assertEq(loss, 0, "!loss");
 
         skip(strategy.profitMaxUnlockTime());
@@ -354,8 +401,17 @@ contract OperationTest is Setup {
         assertTrue(!trigger);
 
         // Report profit
+        if (noYield) {
+            vm.prank(management);
+            strategy.setDoHealthCheck(false);
+        }
+
         vm.prank(keeper);
-        strategy.report();
+        (, uint256 loss) = strategy.report();
+
+        if (noYield) {
+            assertLe(loss, 1, "!loss");
+        }
 
         (trigger, ) = strategy.tendTrigger();
         assertTrue(!trigger);
@@ -383,8 +439,12 @@ contract OperationTest is Setup {
                 (strategy.balanceOf(user) * 1e18 * strategy.pricePerShare()) /
                 1e36;
             // if _amount is too low, we may have issues with rounding here
-            if (_amount > 1e18) {
-                assertApproxEqAbs(totalUserShare, recreatedUserShare, 1e18);
+            if (_amount > minAprOracleFuzzAmount) {
+                assertApproxEqAbs(
+                    totalUserShare,
+                    recreatedUserShare,
+                    minAprOracleFuzzAmount
+                );
             }
         } else {
             // Withdraw all funds

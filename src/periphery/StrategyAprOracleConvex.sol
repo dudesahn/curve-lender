@@ -127,6 +127,10 @@ contract LlamaLendConvexOracle {
             assets = assets + uint256(_delta);
         }
 
+        if (assets == 0) {
+            return 0;
+        }
+
         // code for lend_apr from curve vault
         // debt: uint256 = self.controller.total_debt()
         // self.amm.rate() * (365 * 86400) * debt / self._total_assets()

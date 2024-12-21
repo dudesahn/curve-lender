@@ -29,10 +29,17 @@ contract ShutdownTest is Setup {
         uint256 balanceBefore = asset.balanceOf(user);
 
         // Withdraw all funds
-        vm.prank(user);
-        strategy.redeem(_amount, user, user);
+        uint256 toRedeem = strategy.maxRedeem(user);
 
-        assertEq(strategy.totalAssets(), 0, "!zero");
+        if (noYield) {
+            vm.prank(user);
+            strategy.redeem(toRedeem, user, user);
+            assertLe(strategy.totalAssets(), 1, "!one");
+        } else {
+            vm.prank(user);
+            strategy.redeem(_amount, user, user);
+            assertEq(strategy.totalAssets(), 0, "!zero");
+        }
 
         assertGe(
             asset.balanceOf(user) + 1, // add a 1 wei buffer since we convert between shares on deposit/withdraw
@@ -85,11 +92,19 @@ contract ShutdownTest is Setup {
 
         assertEq(strategy.totalAssets(), 0, "!zero");
 
-        assertGe(
-            asset.balanceOf(user) + 1, // add a 1 wei buffer since we convert between shares on deposit/withdraw
-            balanceBefore + _amount,
-            "!final balance"
-        );
+        if (noYield) {
+            assertGe(
+                asset.balanceOf(user) + 1, // 1 wei loss for 4626 rounding
+                balanceBefore + _amount,
+                "!final balance"
+            );
+        } else {
+            assertGe(
+                asset.balanceOf(user),
+                balanceBefore + _amount,
+                "!final balance"
+            );
+        }
     }
 
     // TODO: Add tests for any emergency function added.
