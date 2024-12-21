@@ -107,7 +107,7 @@ contract Setup is ExtendedTest, IEvents {
 
         // set market/gauge variables
         uint256 useMarket = 0;
-        useConvex = false;
+        useConvex = false; // test commit
 
         // deploy our strategy factories
         curveFactory = new LlamaLendCurveFactory(
