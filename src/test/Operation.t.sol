@@ -81,9 +81,11 @@ contract OperationTest is Setup {
         // Deposit into strategy
         mintAndDepositIntoStrategy(strategy, user, _amount);
 
-        // make sure the gauge tokens are in the voter
-        uint256 gaugeBalance = ERC20(strategy.gauge()).balanceOf(voter);
-        assertGt(gaugeBalance, 0, "!gaugeVoter");
+        // make sure the gauge tokens are in the voter for curve strategy
+        if (useConvex == false) {
+            uint256 gaugeBalance = ERC20(strategy.gauge()).balanceOf(voter);
+            assertGt(gaugeBalance, 0, "!gaugeVoter");
+        }
 
         assertEq(strategy.totalAssets(), _amount, "!totalAssets");
 

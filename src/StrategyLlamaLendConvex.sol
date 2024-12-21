@@ -3,7 +3,7 @@ pragma solidity ^0.8.18;
 
 import {Base4626Compounder, ERC20, SafeERC20, Math} from "@periphery/Bases/4626Compounder/Base4626Compounder.sol";
 import {TradeFactorySwapper} from "@periphery/swappers/TradeFactorySwapper.sol";
-import {ICurveStrategyProxy, IGauge} from "./interfaces/ICrvusdInterfaces.sol";
+import {IConvexBooster, IConvexRewards} from "./interfaces/ICrvusdInterfaces.sol";
 
 contract StrategyLlamaLendConvex is Base4626Compounder, TradeFactorySwapper {
     using SafeERC20 for ERC20;
@@ -16,6 +16,9 @@ contract StrategyLlamaLendConvex is Base4626Compounder, TradeFactorySwapper {
 
     /// @notice This is a unique numerical identifier for each Convex pool.
     uint256 public immutable pid;
+
+    /// @notice Curve gauge address corresponding to our Curve Lend LP
+    address public immutable gauge;
 
     /**
      * @param _asset Underlying asset to use for this strategy.
@@ -38,10 +41,16 @@ contract StrategyLlamaLendConvex is Base4626Compounder, TradeFactorySwapper {
         pid = _pid;
 
         // use our pid to pull the corresponding rewards contract and LP token
-        (address lptoken, , , address _rewardsContract, , ) = booster.poolInfo(
-            _pid
-        );
+        (
+            address lptoken,
+            ,
+            address _gauge,
+            address _rewardsContract,
+            ,
+
+        ) = booster.poolInfo(_pid);
         rewardsContract = IConvexRewards(_rewardsContract);
+        gauge = _gauge;
 
         // make sure we used the correct pid for our llama lend vault
         require(_vault == lptoken, "wrong pid");

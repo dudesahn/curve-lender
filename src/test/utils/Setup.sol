@@ -4,7 +4,8 @@ pragma solidity ^0.8.18;
 import "forge-std/console2.sol";
 import {ExtendedTest} from "./ExtendedTest.sol";
 
-import {StrategyCrvusdRouter, ERC20} from "../../StrategyCrvusdRouter.sol";
+import {StrategyLlamaLendCurve, ERC20} from "../../StrategyLlamaLendCurve.sol";
+import {StrategyLlamaLendConvex} from "../../StrategyLlamaLendConvex.sol";
 import {IStrategyInterface} from "../../interfaces/IStrategyInterface.sol";
 import {IV2StrategyInterface} from "../../interfaces/IV2StrategyInterface.sol";
 import {ICurveStrategyProxy} from "../../interfaces/ICrvusdInterfaces.sol";
@@ -33,13 +34,18 @@ contract Setup is ExtendedTest, IEvents {
     address public management = address(1);
     address public performanceFeeRecipient = address(3);
     address public constant chad = 0xFEB4acf3df3cDEA7399794D0869ef76A6EfAff52;
-    
+
     // whether we test our curve or convex strategy
-    bool public testConvex;
+    bool public useConvex;
 
     // addresses for deployment
     address public curveLendVault;
     address public curveLendGauge;
+
+    // convex vars
+    uint256 public pid;
+    address public constant booster =
+        0xF403C135812408BFbE8713b5A23a04b3D48AAE31;
 
     // yearn's strategy proxy and voter
     ICurveStrategyProxy public constant strategyProxy =
@@ -53,6 +59,8 @@ contract Setup is ExtendedTest, IEvents {
     address public rewardToken;
     ERC20 public constant crv =
         ERC20(0xD533a949740bb3306d119CC777fa900bA034cd52);
+    ERC20 public constant cvx =
+        ERC20(0x4e3FBD56CD56c3e72c1403e103b45Db9da5B9D2B);
 
     // Address of the real deployed Factory
     address public factory;
@@ -78,13 +86,14 @@ contract Setup is ExtendedTest, IEvents {
         decimals = asset.decimals();
 
         // set market/gauge variables
-        uint256 useMarket = 3;
-        testConvex;
+        uint256 useMarket = 5;
+        useConvex = false;
 
         if (useMarket == 0) {
             // wstETH
             curveLendVault = 0x21CF1c5Dc48C603b89907FE6a7AE83EA5e3709aF;
             curveLendGauge = 0x0621982CdA4fD4041964e91AF4080583C5F099e1;
+            pid = 364;
 
             // need special logic here to shutdown the existing vault
             IV2StrategyInterface vaultV2 = IV2StrategyInterface(
@@ -103,22 +112,30 @@ contract Setup is ExtendedTest, IEvents {
             // sDOLA
             curveLendVault = 0x14361C243174794E2207296a6AD59bb0Dec1d388;
             curveLendGauge = 0x30e06CADFbC54d61B7821dC1e58026bf3435d2Fe;
+            pid = 384;
         } else if (useMarket == 2) {
             // UwU (use to test gauges with extra incentives)
             curveLendVault = 0x7586C58bf6292B3C9DeFC8333fc757d6c5dA0f7E;
             curveLendGauge = 0xad7B288315b0d71D62827338251A8D89A98132A0;
+            pid = 343;
             hasRewards = true;
             rewardToken = 0x55C08ca52497e2f1534B59E2917BF524D4765257;
         } else if (useMarket == 3) {
             // sUSDe (vault exists for it, but is empty, so nothing else needed to do)
             curveLendVault = 0x4a7999c55d3a93dAf72EA112985e57c2E3b9e95D;
             curveLendGauge = 0xAE1680Ef5EFc2486E73D8d5D0f8a8dB77DA5774E;
+            pid = 361;
         } else if (useMarket == 4) {
-            // USD0 (tiny TVL, not approved on gauge controller)
+            // tBTC (needs notify rewards on Convex!)
+            curveLendVault = 0xb2b23C87a4B6d1b03Ba603F7C3EB9A81fDC0AAC9;
+            curveLendGauge = 0x41eBf0bEC45642A675e8b7536A2cE9c078A814B4;
+            pid = 328;
+        } else if (useMarket == 5) {
+            // USD0 (tiny TVL, not approved on gauge controller). will revert for convex
             curveLendVault = 0x0111646E459e0BBa57daCA438262f3A092ae24C6;
             curveLendGauge = 0x1d701D23CE74d5B721d24D668A79c44Db2D5A0AE;
-        } else if (useMarket == 5) {
-            // ynETH (fully empty)
+        } else if (useMarket == 6) {
+            // ynETH (fully empty). will revert for convex
             curveLendVault = 0xC6F7E164ed085b68d5DF20d264f70410CB0B7458;
             curveLendGauge = 0xe9cA32785e192abD1bcF4e9fa0160Dc47E93ED89;
         }
@@ -131,33 +148,39 @@ contract Setup is ExtendedTest, IEvents {
         setUpTradeFactory();
 
         // add our new strategy to the voter proxy
-        setUpProxy();
+        if (useConvex == false) {
+            setUpProxy();
 
-        // setup rewards claiming
-        if (useMarket == 0) {
-            // wstETH
-            vm.prank(management);
-            strategy.setClaimFlags(true, false);
-        } else if (useMarket == 1) {
-            // sDOLA
-            vm.prank(management);
-            strategy.setClaimFlags(true, false);
-        } else if (useMarket == 2) {
-            // UwU (use to test gauges with extra incentives). approved on gauge controller but no emissions currently
-            vm.prank(management);
-            strategy.setClaimFlags(false, true);
-        } else if (useMarket == 3) {
-            // sUSDe (vault exists for it, but is empty, so nothing else needed to do)
-            vm.prank(management);
-            strategy.setClaimFlags(true, false);
-        } else if (useMarket == 4) {
-            // USD0 (tiny TVL, not approved on gauge controller)
-            vm.prank(management);
-            strategy.setClaimFlags(false, false);
-        } else if (useMarket == 5) {
-            // ynETH (fully empty, not approved on gauge controller)
-            vm.prank(management);
-            strategy.setClaimFlags(false, false);
+            // setup rewards claiming
+            if (useMarket == 0) {
+                // wstETH
+                vm.prank(management);
+                strategy.setClaimFlags(true, false);
+            } else if (useMarket == 1) {
+                // sDOLA
+                vm.prank(management);
+                strategy.setClaimFlags(true, false);
+            } else if (useMarket == 2) {
+                // UwU (use to test gauges with extra incentives). approved on gauge controller but no emissions currently
+                vm.prank(management);
+                strategy.setClaimFlags(false, true);
+            } else if (useMarket == 3) {
+                // sUSDe (vault exists for it, but is empty, so nothing else needed to do)
+                vm.prank(management);
+                strategy.setClaimFlags(true, false);
+            } else if (useMarket == 4) {
+                // tBTC
+                vm.prank(management);
+                strategy.setClaimFlags(true, false);
+            } else if (useMarket == 5) {
+                // USD0 (tiny TVL, not approved on gauge controller)
+                vm.prank(management);
+                strategy.setClaimFlags(false, false);
+            } else if (useMarket == 6) {
+                // ynETH (fully empty, not approved on gauge controller)
+                vm.prank(management);
+                strategy.setClaimFlags(false, false);
+            }
         }
 
         // label all the used addresses for traces
@@ -172,24 +195,25 @@ contract Setup is ExtendedTest, IEvents {
     }
 
     function setUpStrategy() public returns (address) {
-        if (testConvex) {
+        IStrategyInterface _strategy;
+        if (useConvex) {
             // we save the strategy as a IStrategyInterface to give it the needed interface
-            IStrategyInterface _strategy = IStrategyInterface(
+            _strategy = IStrategyInterface(
                 address(
                     new StrategyLlamaLendConvex(
                         address(asset),
-                        "Curve Boosted crvUSD-sDOLA Lender",
+                        "Convex crvUSD-sDOLA Lender",
                         curveLendVault,
-                        curveLendGauge,
-                        address(strategyProxy)
+                        pid,
+                        booster
                     )
                 )
             );
         } else {
             // we save the strategy as a IStrategyInterface to give it the needed interface
-            IStrategyInterface _strategy = IStrategyInterface(
+            _strategy = IStrategyInterface(
                 address(
-                    new StrategyCrvusdRouter(
+                    new StrategyLlamaLendCurve(
                         address(asset),
                         "Curve Boosted crvUSD-sDOLA Lender",
                         curveLendVault,
@@ -216,15 +240,19 @@ contract Setup is ExtendedTest, IEvents {
     }
 
     function setUpTradeFactory() public {
-        vm.prank(management);
+        vm.startPrank(management);
         strategy.setTradeFactory(tradeFactory);
-        vm.prank(management);
         strategy.addToken(address(crv));
+
+        if (useConvex) {
+            strategy.addToken(address(cvx));
+        }
+
         if (hasRewards) {
             // add our rewards token to our strategy if needed
-            vm.prank(management);
             strategy.addToken(rewardToken);
         }
+        vm.stopPrank();
     }
 
     function setUpProxy() public {
@@ -293,8 +321,25 @@ contract Setup is ExtendedTest, IEvents {
             crvBalance = crv.balanceOf(address(strategy));
         }
 
+        // trade factory should sweep out CVX, and we mint the strategy _profitAmount of asset
+        uint256 cvxBalance = cvx.balanceOf(address(strategy));
+
+        // if we have CVX, sweep it out, and send back our designated profitAmount
+        if (cvxBalance > 0) {
+            console2.log(
+                "CVX sitting in our strategy",
+                cvxBalance / 1e18,
+                "* 1e18 CVX"
+            );
+            vm.prank(tradeFactory);
+            cvx.transferFrom(address(strategy), tradeFactory, cvxBalance);
+            airdrop(asset, address(strategy), _profitAmount);
+            cvxBalance = cvx.balanceOf(address(strategy));
+        }
+
         // confirm that we swept everything out
         assertEq(crvBalance, 0, "!crvBalance");
+        assertEq(cvxBalance, 0, "!cvxBalance");
         assertEq(rewardBalance, 0, "!rewardBalance");
     }
 

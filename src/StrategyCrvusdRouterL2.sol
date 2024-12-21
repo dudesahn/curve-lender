@@ -24,7 +24,7 @@ contract StrategyLlamaLendCurveL2 is Base4626Compounder, TradeFactorySwapper {
         address _gauge
     ) Base4626Compounder(_asset, _name, _vault) {
         require(_vault == IGauge(_gauge).lp_token(), "gauge mismatch");
-        gauge = _gauge;
+        gauge = IGauge(_gauge);
     }
 
     /* ========== BASE4626 FUNCTIONS ========== */

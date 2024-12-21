@@ -4,7 +4,7 @@ pragma solidity ^0.8.18;
 // example of FE APY calcs: https://github.com/Gearbox-protocol/sdk/blob/next/src/gearboxRewards/apy.ts
 // https://github.com/Gearbox-protocol/defillama/blob/7127e015b2dc3f47043292e8801d01930560003c/src/yield-server/index.ts#L242
 
-import {Math} from "@periphery/Bases/4626Compounder/Base4626Compounder.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 interface IStrategy {
     function vault() external view returns (address);
@@ -50,7 +50,7 @@ interface ICurvePool {
     ) external view returns (uint256);
 }
 
-contract SimpleLlamaLendOracle {
+contract LlamaLendOracle {
     address internal constant TRI_CRV_USD_CURVE_POOL =
         0x4eBdF703948ddCEA3B11f675B4D1Fba9d2414A14;
 

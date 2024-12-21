@@ -20,14 +20,14 @@ contract StrategyLlamaLendCurve is Base4626Compounder, TradeFactorySwapper {
     /// @notice Yearns strategyProxy, needed for interacting with our Curve Voter.
     ICurveStrategyProxy public proxy;
 
-    // Curve gauge address corresponding to our Curve Lend LP
+    /// @notice Info about our rewards. See struct NatSpec for more details.
+    RewardsInfo public rewardsInfo;
+
+    /// @notice Curve gauge address corresponding to our Curve Lend LP
     address public immutable gauge;
 
     // yChad, the only one who can update our strategy proxy address
     address internal constant GOV = 0xFEB4acf3df3cDEA7399794D0869ef76A6EfAff52;
-
-    /// @notice Info about our rewards. See struct NatSpec for more details.
-    RewardsInfo public rewardsInfo;
 
     /**
      * @param _asset Underlying asset to use for this strategy.
