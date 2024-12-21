@@ -106,7 +106,7 @@ contract Setup is ExtendedTest, IEvents {
         decimals = asset.decimals();
 
         // set market/gauge variables
-        uint256 useMarket = 3;
+        uint256 useMarket = 0;
         useConvex = false;
 
         // deploy our strategy factories
@@ -134,19 +134,41 @@ contract Setup is ExtendedTest, IEvents {
             curveLendGauge = 0x0621982CdA4fD4041964e91AF4080583C5F099e1;
             pid = 364;
 
-            // need special logic here to shutdown the existing vault
-            IV2StrategyInterface vaultV2 = IV2StrategyInterface(
-                0xbA8e83CC28B54bB063984033Df20F9a9F1220C24
-            );
-            IV2StrategyInterface strategyV2 = IV2StrategyInterface(
-                vaultV2.withdrawalQueue(1)
-            );
+            // since this curve vault has TVL, need a few special steps
+            if (useConvex == false) {
+                // trying to deploy this strategy now should revert
+                vm.expectRevert("strategy exists");
+                vm.prank(management);
+                curveFactory.newCurveLender(
+                    "Curve Boosted crvUSD-sDOLA Lender",
+                    curveLendVault,
+                    curveLendGauge
+                );
 
-            // we have to clear this out before we set associate our new strategy with the gauge
-            vm.startPrank(chad);
-            vaultV2.updateStrategyDebtRatio(address(strategyV2), 0);
-            strategyV2.harvest();
-            vm.stopPrank();
+                // need special logic here to shutdown the existing vault
+                IV2StrategyInterface vaultV2 = IV2StrategyInterface(
+                    0xbA8e83CC28B54bB063984033Df20F9a9F1220C24
+                );
+                IV2StrategyInterface strategyV2 = IV2StrategyInterface(
+                    vaultV2.withdrawalQueue(1)
+                );
+
+                // we have to clear this out before we set associate our new strategy with the gauge
+                vm.startPrank(chad);
+                vaultV2.updateStrategyDebtRatio(address(strategyV2), 0);
+                strategyV2.harvest();
+                // now we remove the strategy-gauge linkage on the strategy proxy
+                strategyProxy.revokeStrategy(curveLendGauge);
+
+                // now we expect the management revert
+                vm.expectRevert("!management");
+                curveFactory.newCurveLender(
+                    "Curve Boosted crvUSD-sDOLA Lender",
+                    curveLendVault,
+                    curveLendGauge
+                );
+                vm.stopPrank();
+            }
         } else if (useMarket == 1) {
             // sDOLA
             curveLendVault = 0x14361C243174794E2207296a6AD59bb0Dec1d388;
@@ -160,15 +182,23 @@ contract Setup is ExtendedTest, IEvents {
             hasRewards = true;
             rewardToken = 0x55C08ca52497e2f1534B59E2917BF524D4765257;
         } else if (useMarket == 3) {
-            // sUSDe (vault exists for it, but is empty, so nothing else needed to do)
+            // sUSDe (vault exists for it, but is empty, so just need to revoke)
             curveLendVault = 0x4a7999c55d3a93dAf72EA112985e57c2E3b9e95D;
             curveLendGauge = 0xAE1680Ef5EFc2486E73D8d5D0f8a8dB77DA5774E;
             pid = 361;
+
+            // remove the strategy-gauge linkage on the strategy proxy
+            vm.prank(chad);
+            strategyProxy.revokeStrategy(curveLendGauge);
         } else if (useMarket == 4) {
             // tBTC (needs notify rewards on Convex!)
             curveLendVault = 0xb2b23C87a4B6d1b03Ba603F7C3EB9A81fDC0AAC9;
             curveLendGauge = 0x41eBf0bEC45642A675e8b7536A2cE9c078A814B4;
             pid = 328;
+
+            // remove the strategy-gauge linkage on the strategy proxy
+            vm.prank(chad);
+            strategyProxy.revokeStrategy(curveLendGauge);
         } else if (useMarket == 5) {
             // USD0 (tiny TVL, not approved on gauge controller). will revert for convex
             curveLendVault = 0x0111646E459e0BBa57daCA438262f3A092ae24C6;

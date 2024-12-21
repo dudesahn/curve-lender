@@ -24,6 +24,15 @@ contract FactoryTest is Setup {
                 address(strategy)
             );
             assertEq(true, curveFactory.isDeployedStrategy(address(strategy)));
+
+            // shouldn't be able to deploy another strategy for the same gauge for curve factory
+            vm.expectRevert("strategy exists");
+            vm.prank(management);
+            curveFactory.newCurveLender(
+                "Curve Boosted crvUSD-sDOLA Lender",
+                curveLendVault,
+                curveLendGauge
+            );
         }
 
         assertEq(strategy.management(), management);

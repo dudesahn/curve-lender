@@ -10,6 +10,8 @@ interface IVoter {
 
 interface IProxy {
     function approveStrategy(address _gauge, address _strategy) external;
+
+    function strategies(address) external view returns (address);
 }
 
 contract LlamaLendCurveFactory {
@@ -57,10 +59,17 @@ contract LlamaLendCurveFactory {
         address _gauge
     ) external returns (address) {
         require(msg.sender == management, "!management");
+
         // We need to use the custom interface with the tokenized strategies available setters.
         // the only asset we will use in this factory is crvUSD
         // strategy checks that gauge and vault token match, so factory doesn't need to
         address strategyProxy = VOTER.strategy();
+
+        require(
+            IProxy(strategyProxy).strategies(_gauge) == address(0),
+            "strategy exists"
+        );
+
         IStrategyInterface newStrategy = IStrategyInterface(
             address(
                 new StrategyLlamaLendCurve(
