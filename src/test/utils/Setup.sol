@@ -4,8 +4,15 @@ pragma solidity ^0.8.18;
 import "forge-std/console2.sol";
 import {ExtendedTest} from "./ExtendedTest.sol";
 
+// contracts
 import {StrategyLlamaLendCurve, ERC20} from "../../StrategyLlamaLendCurve.sol";
 import {StrategyLlamaLendConvex} from "../../StrategyLlamaLendConvex.sol";
+import {LlamaLendCurveFactory} from "../../LlamaLendCurveFactory.sol";
+import {LlamaLendConvexFactory} from "../../LlamaLendConvexFactory.sol";
+import {LlamaLendOracle} from "../../periphery/StrategyAprOracle.sol";
+import {LlamaLendConvexOracle} from "../../periphery/StrategyAprOracleConvex.sol";
+
+// interfaces
 import {IStrategyInterface} from "../../interfaces/IStrategyInterface.sol";
 import {IV2StrategyInterface} from "../../interfaces/IV2StrategyInterface.sol";
 import {ICurveStrategyProxy} from "../../interfaces/ICrvusdInterfaces.sol";
@@ -34,6 +41,8 @@ contract Setup is ExtendedTest, IEvents {
     address public management = address(1);
     address public performanceFeeRecipient = address(3);
     address public constant chad = 0xFEB4acf3df3cDEA7399794D0869ef76A6EfAff52;
+    address public constant emergencyAdmin =
+        0x16388463d60FFE0661Cf7F1f31a7D658aC790ff7; // sms
 
     // whether we test our curve or convex strategy
     bool public useConvex;
@@ -41,6 +50,10 @@ contract Setup is ExtendedTest, IEvents {
     // addresses for deployment
     address public curveLendVault;
     address public curveLendGauge;
+
+    // factories
+    LlamaLendCurveFactory public curveFactory;
+    LlamaLendConvexFactory public convexFactory;
 
     // convex vars
     uint256 public pid;
@@ -80,6 +93,9 @@ contract Setup is ExtendedTest, IEvents {
     // state var to use in case we have very low or zero yield; some of our assumptions break
     bool public noYield;
 
+    LlamaLendOracle public oracle;
+    LlamaLendConvexOracle public convexOracle;
+
     function setUp() public virtual {
         _setTokenAddrs();
 
@@ -90,8 +106,27 @@ contract Setup is ExtendedTest, IEvents {
         decimals = asset.decimals();
 
         // set market/gauge variables
-        uint256 useMarket = 6;
+        uint256 useMarket = 3;
         useConvex = false;
+
+        // deploy our strategy factories
+        curveFactory = new LlamaLendCurveFactory(
+            management,
+            performanceFeeRecipient,
+            keeper,
+            emergencyAdmin
+        );
+        convexFactory = new LlamaLendConvexFactory(
+            management,
+            performanceFeeRecipient,
+            keeper,
+            emergencyAdmin
+        );
+
+        // give our factory the power to add strategy/gauges to strategy proxy
+        if (useConvex == false) {
+            setUpProxy();
+        }
 
         if (useMarket == 0) {
             // wstETH
@@ -155,8 +190,6 @@ contract Setup is ExtendedTest, IEvents {
 
         // add our new strategy to the voter proxy
         if (useConvex == false) {
-            setUpProxy();
-
             // setup rewards claiming
             if (useMarket == 0) {
                 // wstETH
@@ -189,6 +222,10 @@ contract Setup is ExtendedTest, IEvents {
             }
         }
 
+        // deploy our oracles
+        oracle = new LlamaLendOracle();
+        convexOracle = new LlamaLendConvexOracle();
+
         // label all the used addresses for traces
         vm.label(user, "user");
         vm.label(keeper, "keeper");
@@ -198,49 +235,41 @@ contract Setup is ExtendedTest, IEvents {
         vm.label(chad, "ychad");
         vm.label(address(strategy), "strategy");
         vm.label(performanceFeeRecipient, "performanceFeeRecipient");
+        vm.label(emergencyAdmin, "SMS");
     }
 
     function setUpStrategy() public returns (address) {
         IStrategyInterface _strategy;
         if (useConvex) {
             // we save the strategy as a IStrategyInterface to give it the needed interface
+            vm.prank(management);
             _strategy = IStrategyInterface(
-                address(
-                    new StrategyLlamaLendConvex(
-                        address(asset),
-                        "Convex crvUSD-sDOLA Lender",
-                        curveLendVault,
-                        pid,
-                        booster
-                    )
+                convexFactory.newConvexLender(
+                    "Convex crvUSD-sDOLA Lender",
+                    curveLendVault,
+                    pid
                 )
             );
+            assertEq(_strategy.management(), address(convexFactory));
         } else {
             // we save the strategy as a IStrategyInterface to give it the needed interface
+            vm.prank(management);
             _strategy = IStrategyInterface(
-                address(
-                    new StrategyLlamaLendCurve(
-                        address(asset),
-                        "Curve Boosted crvUSD-sDOLA Lender",
-                        curveLendVault,
-                        curveLendGauge,
-                        address(strategyProxy)
-                    )
+                curveFactory.newCurveLender(
+                    "Curve Boosted crvUSD-sDOLA Lender",
+                    curveLendVault,
+                    curveLendGauge
                 )
             );
+            assertEq(_strategy.management(), address(curveFactory));
         }
-
-        // set keeper
-        _strategy.setKeeper(keeper);
-        // set treasury
-        _strategy.setPerformanceFeeRecipient(performanceFeeRecipient);
-        // set management of the strategy
-        _strategy.setPendingManagement(management);
-        // set profit unlock
-        _strategy.setProfitMaxUnlockTime(profitMaxUnlockTime);
 
         vm.prank(management);
         _strategy.acceptManagement();
+
+        // set profit unlock
+        vm.prank(management);
+        _strategy.setProfitMaxUnlockTime(profitMaxUnlockTime);
 
         return address(_strategy);
     }
@@ -279,10 +308,9 @@ contract Setup is ExtendedTest, IEvents {
         //    gauge.transfer(ZERO_ADDRESS, gauge.balanceOf(voter), sender=voter)
         //    assert gauge.balanceOf(voter) == 0
 
-        // link the strategy and gauge on the strategy proxy
-        vm.startPrank(chad); // need to do start/stop since we pull the gauge via call
-        strategyProxy.approveStrategy(strategy.gauge(), address(strategy));
-        vm.stopPrank();
+        // approve our new factory to add gauge/strategy combos to strategy proxy
+        vm.prank(chad);
+        strategyProxy.approveFactory(address(curveFactory), true);
     }
 
     function simulateTradeFactory(uint256 _profitAmount) public {

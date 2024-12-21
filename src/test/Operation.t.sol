@@ -165,7 +165,20 @@ contract OperationTest is Setup {
             assertGe(profitTwo, 0, "!profit");
             assertLe(lossTwo, 1, "!loss");
         } else {
-            assertGt(profitTwo, profit, "!profitComp");
+            if (useConvex) {
+                (, uint256 cvxApr, ) = convexOracle.getConvexApr(
+                    address(strategy),
+                    strategy.vault(),
+                    0
+                );
+                if (cvxApr == 0) {
+                    assertGe(profitTwo, profit, "!profitComp");
+                } else {
+                    assertGt(profitTwo, profit, "!profitComp");
+                }
+            } else {
+                assertGt(profitTwo, profit, "!profitComp");
+            }
             assertGt(profitTwo, 0, "!profit");
             assertEq(lossTwo, 0, "!loss");
         }

@@ -3,21 +3,13 @@ pragma solidity ^0.8.18;
 import "forge-std/console2.sol";
 import {ERC20, Setup} from "./utils/Setup.sol";
 
-import {LlamaLendOracle} from "../periphery/StrategyAprOracle.sol";
-import {LlamaLendConvexOracle} from "../periphery/StrategyAprOracleConvex.sol";
-
 interface ICurveVault {
     function collateral_token() external view returns (address);
 }
 
 contract OracleTest is Setup {
-    LlamaLendOracle public oracle;
-    LlamaLendConvexOracle public convexOracle;
-
     function setUp() public override {
         super.setUp();
-        oracle = new LlamaLendOracle();
-        convexOracle = new LlamaLendConvexOracle();
     }
 
     function checkOracle(
