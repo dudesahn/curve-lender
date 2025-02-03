@@ -4,6 +4,7 @@ pragma solidity ^0.8.18;
 import {Base4626Compounder, ERC20, SafeERC20, Math} from "@periphery/Bases/4626Compounder/Base4626Compounder.sol";
 import {TradeFactorySwapper} from "@periphery/swappers/TradeFactorySwapper.sol";
 import {IConvexBooster, IConvexRewards} from "./interfaces/ICrvusdInterfaces.sol";
+import {IAuction} from "./interfaces/IAuction.sol";
 
 contract StrategyLlamaLendConvex is Base4626Compounder, TradeFactorySwapper {
     using SafeERC20 for ERC20;
@@ -19,6 +20,9 @@ contract StrategyLlamaLendConvex is Base4626Compounder, TradeFactorySwapper {
 
     /// @notice Curve gauge address corresponding to our Curve Lend LP
     address public immutable gauge;
+
+    /// @notice Address of the specific Auction this strategy uses.
+    address public auction;
 
     /**
      * @param _asset Underlying asset to use for this strategy.
@@ -129,5 +133,34 @@ contract StrategyLlamaLendConvex is Base4626Compounder, TradeFactorySwapper {
      */
     function setTradeFactory(address _tradeFactory) external onlyManagement {
         _setTradeFactory(_tradeFactory, address(asset));
+    }
+
+    /* ========== AUCTION FUNCTIONS ========== */
+
+    /**
+     * @notice Kick an auction for a given token.
+     * @param _token The token that is being sold.
+     * @dev Will revert if _token has not been enabled on the auction contract.
+     * @return available The available amount for bidding on in the auction.
+     */
+    function kickAuction(address _token) external onlyManagement returns (uint256 available) {
+        require(
+            _token != address(asset) && _token != address(vault),
+            "!allowed"
+        );
+        uint256 _balance = ERC20(_token).balanceOf(address(this));
+        ERC20(_token).safeTransfer(auction, _balance);
+        return Auction(auction).kick(_token);
+    }
+
+    /**
+     * @notice Use to update our auction contract address.
+     * @dev Can only be called by management.
+     * @param _auction Address of new auction.
+     */
+    function setAuction(address _auction) external onlyManagement {
+        // Can only use one `want` per auction contract.
+        require(Auction(_auction).want() == _want, "wrong want");
+        auction = _auction;
     }
 }
