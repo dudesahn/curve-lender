@@ -65,9 +65,7 @@ contract StrategyLlamaLendConvex is Base4626Compounder, TradeFactorySwapper {
 
     /* ========== BASE4626 FUNCTIONS ========== */
 
-    /**
-     * @notice Balance of 4626 vault tokens held in our strategy proxy
-     */
+    /// @notice Balance of 4626 vault tokens staked in convex
     function balanceOfStake() public view override returns (uint256 stake) {
         stake = rewardsContract.balanceOf(address(this));
     }
@@ -143,14 +141,16 @@ contract StrategyLlamaLendConvex is Base4626Compounder, TradeFactorySwapper {
      * @dev Will revert if _token has not been enabled on the auction contract.
      * @return available The available amount for bidding on in the auction.
      */
-    function kickAuction(address _token) external onlyManagement returns (uint256 available) {
+    function kickAuction(
+        address _token
+    ) external onlyManagement returns (uint256 available) {
         require(
             _token != address(asset) && _token != address(vault),
             "!allowed"
         );
         uint256 _balance = ERC20(_token).balanceOf(address(this));
         ERC20(_token).safeTransfer(auction, _balance);
-        return Auction(auction).kick(_token);
+        return IAuction(auction).kick(_token);
     }
 
     /**
@@ -159,8 +159,13 @@ contract StrategyLlamaLendConvex is Base4626Compounder, TradeFactorySwapper {
      * @param _auction Address of new auction.
      */
     function setAuction(address _auction) external onlyManagement {
-        // Can only use one `want` per auction contract.
-        require(Auction(_auction).want() == _want, "wrong want");
+        if (_auction != address(0)) {
+            require(IAuction(_auction).want() == address(asset), "wrong want");
+            require(
+                IAuction(_auction).receiver() == address(this),
+                "wrong receiver"
+            );
+        }
         auction = _auction;
     }
 }

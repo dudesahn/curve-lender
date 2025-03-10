@@ -307,15 +307,21 @@ contract Setup is ExtendedTest, IEvents {
     function setUpTradeFactory() public {
         vm.startPrank(management);
         strategy.setTradeFactory(tradeFactory);
-        strategy.addToken(address(crv));
+        strategy.addRewardToken(address(crv), IStrategyInterface.SwapType.TF);
 
         if (useConvex) {
-            strategy.addToken(address(cvx));
+            strategy.addRewardToken(
+                address(cvx),
+                IStrategyInterface.SwapType.TF
+            );
         }
 
         if (hasRewards) {
             // add our rewards token to our strategy if needed
-            strategy.addToken(rewardToken);
+            strategy.addRewardToken(
+                rewardToken,
+                IStrategyInterface.SwapType.TF
+            );
         }
         vm.stopPrank();
     }
