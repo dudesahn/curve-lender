@@ -7,8 +7,6 @@ import {ICurveStrategyProxy, IGauge} from "./interfaces/ICrvusdInterfaces.sol";
 import {IAuction} from "./interfaces/IAuction.sol";
 import {IPool} from "./interfaces/IPool.sol";
 
-// think about adding some testing for when markets are fully utilized? got it simulated a bit w/ wstETH, seemed fine
-
 contract StrategyLlamaLendCurve is Base4626Compounder, TradeFactorySwapper {
     using SafeERC20 for ERC20;
 
@@ -85,7 +83,7 @@ contract StrategyLlamaLendCurve is Base4626Compounder, TradeFactorySwapper {
     }
 
     /* ========== BASE4626 FUNCTIONS ========== */
-    
+
     /// @notice Balance of 4626 vault tokens held in our strategy proxy
     function balanceOfStake() public view override returns (uint256 stake) {
         stake = proxy.balanceOf(gauge);
@@ -130,7 +128,7 @@ contract StrategyLlamaLendCurve is Base4626Compounder, TradeFactorySwapper {
         if (rewards.claimExtra) {
             // technically we shouldn't pass CRV here, but since we know llama lend uses
             //  newer gauges, this won't be an issue in practice
-            proxy.claimManyRewards(gauge, rewardTokens());
+            proxy.claimManyRewards(gauge, allRewardTokens);
         }
     }
 
@@ -141,7 +139,9 @@ contract StrategyLlamaLendCurve is Base4626Compounder, TradeFactorySwapper {
         address[] memory _allRewardTokens = allRewardTokens;
         uint256 _length = _allRewardTokens.length;
 
-        for (uint256 i = 0; i < _length; i++) {
+        // should really re-work all of this based on CRV selling
+
+        for (uint256 i; i < _length; ++i) {
             address token = _allRewardTokens[i];
             SwapType _swapType = swapType[token];
             uint256 balance = ERC20(token).balanceOf(address(this));
@@ -155,7 +155,7 @@ contract StrategyLlamaLendCurve is Base4626Compounder, TradeFactorySwapper {
     }
 
     function _swapCrvToStable(uint256 _amount) internal {
-        // is it worth calculating the minOut? maybe using the oracle?
+        // atomic swaps should always be sent via private mempool but use price_oracle as backstop
         uint256 crvPrice = TRICRV.price_oracle(1);
         uint256 minAmount = (_amount * crvPrice * minOutBps) / (1e18 * 10_000);
         TRICRV.exchange(2, 0, _amount, minAmount);
@@ -186,7 +186,6 @@ contract StrategyLlamaLendCurve is Base4626Compounder, TradeFactorySwapper {
         return allRewardTokens;
     }
 
-    // ****SHOULD ADD CHECKS TO MAKE SURE THIS ARRAY DOESN'T GET DUPLICATES
     function addRewardToken(
         address _token,
         SwapType _swapType
@@ -216,7 +215,7 @@ contract StrategyLlamaLendCurve is Base4626Compounder, TradeFactorySwapper {
         uint256 _length = _allRewardTokens.length;
         SwapType _swapType = swapType[_token];
 
-        for (uint256 i = 0; i < _length; i++) {
+        for (uint256 i; i < _length; ++i) {
             if (_allRewardTokens[i] == _token) {
                 allRewardTokens[i] = _allRewardTokens[_length - 1];
                 allRewardTokens.pop();
@@ -225,7 +224,7 @@ contract StrategyLlamaLendCurve is Base4626Compounder, TradeFactorySwapper {
         delete swapType[_token];
         delete minAmountToSellMapping[_token];
 
-        // enable on our trade factory
+        // disable on our trade factory
         if (_swapType == SwapType.TF) {
             _removeToken(_token, address(asset));
         }
@@ -253,7 +252,7 @@ contract StrategyLlamaLendCurve is Base4626Compounder, TradeFactorySwapper {
      * @param _strategyProxy Address of our curve strategy proxy.
      */
     function setProxy(address _strategyProxy) external {
-        require(msg.sender == GOV, "!gov");
+        require(msg.sender == GOV, "!proxyGov");
         proxy = ICurveStrategyProxy(_strategyProxy);
     }
 
@@ -288,7 +287,6 @@ contract StrategyLlamaLendCurve is Base4626Compounder, TradeFactorySwapper {
     ) external onlyManagement {
         // just remove instead of setting to null
         require(_swapType != SwapType.NULL, "!null");
-
         swapType[_from] = _swapType;
     }
 
@@ -298,7 +296,7 @@ contract StrategyLlamaLendCurve is Base4626Compounder, TradeFactorySwapper {
      * @param _minOutBps The amount of token we expect out in BPS based on pool oracle pricing.
      */
     function setMinOutBps(uint256 _minOutBps) external onlyManagement {
-        require(_minOutBps < 10_000, "!bps");
+        require(_minOutBps < 10_000, "not bps");
         require(_minOutBps > 9000, "10% max");
         minOutBps = _minOutBps;
     }

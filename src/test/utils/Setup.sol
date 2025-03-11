@@ -20,12 +20,19 @@ import {ICurveStrategyProxy} from "../../interfaces/ICrvusdInterfaces.sol";
 // Inherit the events so they can be checked if desired.
 import {IEvents} from "@tokenized-strategy/interfaces/IEvents.sol";
 
+// import auction so we can deploy a mock to test our auction functions
+import {Auction} from "@periphery/Auctions/Auction.sol";
+
 interface IFactory {
     function governance() external view returns (address);
 
     function set_protocol_fee_bps(uint16) external;
 
     function set_protocol_fee_recipient(address) external;
+}
+
+interface IGauge {
+    function deposit_reward_token(address, uint256) external;
 }
 
 contract Setup is ExtendedTest, IEvents {
@@ -106,7 +113,7 @@ contract Setup is ExtendedTest, IEvents {
         decimals = asset.decimals();
 
         // set market/gauge variables
-        uint256 useMarket = 0;
+        uint256 useMarket = 2;
         useConvex = false; // test commit
 
         // deploy our strategy factories
@@ -181,6 +188,12 @@ contract Setup is ExtendedTest, IEvents {
             pid = 343;
             hasRewards = true;
             rewardToken = 0x55C08ca52497e2f1534B59E2917BF524D4765257;
+
+            // simulate sifu adding more rewards to the gauge
+            address sifu = 0x5DD596C901987A2b28C38A9C1DfBf86fFFc15d77;
+            IGauge uwuGauge = IGauge(curveLendGauge);
+            vm.prank(sifu);
+            uwuGauge.deposit_reward_token(rewardToken, 20_000e18);
         } else if (useMarket == 3) {
             // sUSDe (vault exists for it, but is empty, so just need to revoke)
             curveLendVault = 0x4a7999c55d3a93dAf72EA112985e57c2E3b9e95D;
@@ -307,7 +320,27 @@ contract Setup is ExtendedTest, IEvents {
     function setUpTradeFactory() public {
         vm.startPrank(management);
         strategy.setTradeFactory(tradeFactory);
+
+        // add crv
+        // shouldn't add with null
+        vm.expectRevert("!null");
+        strategy.addRewardToken(address(crv), IStrategyInterface.SwapType.NULL);
+
+        // add for reals
         strategy.addRewardToken(address(crv), IStrategyInterface.SwapType.TF);
+
+        // make sure our requires work
+        vm.expectRevert("!exists");
+        strategy.addRewardToken(
+            address(crv),
+            IStrategyInterface.SwapType.AUCTION
+        );
+
+        // can't add vault or asset
+        vm.expectRevert("!allowed");
+        strategy.addRewardToken(address(asset), IStrategyInterface.SwapType.TF);
+        vm.expectRevert("!allowed");
+        strategy.addRewardToken(curveLendVault, IStrategyInterface.SwapType.TF);
 
         if (useConvex) {
             strategy.addRewardToken(

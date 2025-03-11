@@ -2,7 +2,7 @@
 pragma solidity ^0.8.18;
 
 import "forge-std/console2.sol";
-import {Setup, ERC20, IStrategyInterface} from "./utils/Setup.sol";
+import {Setup, ERC20, Auction, IStrategyInterface} from "./utils/Setup.sol";
 
 contract OperationTest is Setup {
     function setUp() public virtual override {
@@ -18,6 +18,8 @@ contract OperationTest is Setup {
         assertEq(strategy.keeper(), keeper);
         // TODO: add additional check on strat params
     }
+    
+    // TODO: add more tests with full utilization? vault unable to withdraw all funds, etc.
 
     function test_operation_fuzzy(uint256 _amount) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
@@ -115,7 +117,7 @@ contract OperationTest is Setup {
         skip(strategy.profitMaxUnlockTime());
 
         // simulate checking our strategy for CRV and reward tokens using trade factory
-        // should be no tokens to claim since we don't have the logic auto-claiming during reports
+        // there will be no extra rewards here since we haven't reported/claimed yet
         uint256 simulatedProfit = _amount / 200; // 0.5% profit
         simulateTradeFactory(simulatedProfit);
 
@@ -147,6 +149,7 @@ contract OperationTest is Setup {
         // force a claim of CRV and/or our other rewards
         skip(strategy.profitMaxUnlockTime());
         vm.prank(management);
+        // after manually claiming rewards we have 2 days worth of CRV rewards in our strategy
         strategy.claimRewards();
         simulateTradeFactory(simulatedProfit);
 
@@ -226,6 +229,7 @@ contract OperationTest is Setup {
         }
     }
 
+    // test our atomic swaps instead of just airdropping in profit via trade factory
     function test_operation_fixed_swap() public {
         uint256 _amount = 10_000e18;
 
@@ -242,10 +246,6 @@ contract OperationTest is Setup {
 
         // Earn Interest
         skip(strategy.profitMaxUnlockTime());
-
-        // set our reward type to be different
-        vm.prank(management);
-        strategy.setSwapType(address(crv), IStrategyInterface.SwapType.TRICRV);
 
         // Report profit
         vm.prank(keeper);
@@ -272,7 +272,16 @@ contract OperationTest is Setup {
             assertEq(loss, 0, "!loss");
         }
 
-        // force a claim of CRV and/or our other rewards
+        // set our reward type to be different
+        vm.prank(management);
+        strategy.setSwapType(address(crv), IStrategyInterface.SwapType.TRICRV);
+
+        // check require
+        vm.prank(management);
+        vm.expectRevert("!null");
+        strategy.setSwapType(address(crv), IStrategyInterface.SwapType.NULL);
+
+        // skip forward in time
         skip(strategy.profitMaxUnlockTime());
 
         // Report profit
@@ -307,6 +316,25 @@ contract OperationTest is Setup {
             assertGt(profitTwo, 0, "!profit");
             assertEq(lossTwo, 0, "!loss");
         }
+
+        // skip forward in time
+        skip(strategy.profitMaxUnlockTime());
+
+        // set min amount to sell very high so we don't sell anything
+        vm.prank(management);
+        strategy.setMinAmountToSellMapping(address(crv), type(uint256).max);
+
+        // report profit
+        vm.prank(keeper);
+        (uint256 profitThree, ) = strategy.report();
+        console2.log(
+            "Profit from min amount report:",
+            profitThree / 1e18,
+            "* 1e18 crvUSD"
+        );
+
+        // since profitTwo had CRV yield and profitThree didn't, profitTwo should always be greater than or equal
+        assertGe(profitTwo, profitThree, "!profitComp");
 
         // fully unlock our profit
         skip(strategy.profitMaxUnlockTime());
@@ -348,6 +376,28 @@ contract OperationTest is Setup {
                 balanceBefore + _amount,
                 "!final balance"
             );
+        }
+
+        if (!useConvex && !hasRewards) {
+            // add convex as an extra token to test removal
+            vm.startPrank(management);
+            strategy.addRewardToken(
+                address(cvx),
+                IStrategyInterface.SwapType.TF
+            );
+            address[] memory setRewardTokens = strategy.getAllRewardTokens();
+            assertEq(setRewardTokens.length, 2);
+
+            // remove
+            strategy.removeRewardToken(address(cvx));
+            address[] memory newSetRewardTokens = strategy.getAllRewardTokens();
+            assertEq(newSetRewardTokens.length, 1);
+
+            assertEq(
+                uint256(strategy.swapType(address(cvx))),
+                uint256(IStrategyInterface.SwapType.NULL)
+            );
+            vm.stopPrank();
         }
     }
 
@@ -615,5 +665,95 @@ contract OperationTest is Setup {
 
         (trigger, ) = strategy.tendTrigger();
         assertTrue(!trigger);
+    }
+
+    // test other assorted setters
+    function test_setters() public {
+        if (!useConvex) {
+            // set proxy, only gov should be able to do this
+            vm.prank(management);
+            vm.expectRevert("!proxyGov");
+            strategy.setProxy(management);
+
+            // gov should be able to set it
+            vm.prank(chad);
+            strategy.setProxy(chad);
+        }
+
+        // set min out bps
+        vm.startPrank(management);
+        vm.expectRevert("not bps");
+        strategy.setMinOutBps(10_001);
+        vm.expectRevert("10% max");
+        strategy.setMinOutBps(5_000);
+        strategy.setMinOutBps(9700);
+        vm.stopPrank();
+    }
+
+    // test auction stuff
+    function test_auction() public {
+        // deploy a correct auction contract
+        vm.startPrank(management);
+        Auction correctAuction = new Auction();
+
+        // init the auction contract with gud params
+        correctAuction.initialize(
+            address(asset),
+            address(strategy),
+            management,
+            86400,
+            1_000_000
+        );
+
+        // add this auction to our strategy
+        strategy.setAuction(address(correctAuction));
+
+        // set CRV as an auction asset
+        strategy.setSwapType(address(crv), IStrategyInterface.SwapType.AUCTION);
+
+        // enable CRV on the auction contract
+        correctAuction.enable(address(crv));
+
+        // will kick w/ zero assets but should revert in the auction itself
+        vm.expectRevert("nothing to kick");
+        strategy.kickAuction(address(crv));
+
+        // add vault token to the auction itself (can't add want with a proper auction contract)
+        correctAuction.enable(curveLendVault);
+        vm.expectRevert("ZERO ADDRESS");
+        correctAuction.enable(address(asset));
+
+        // try and kick the auction, will fail since it's not added as an auction reward token
+        // and will also revert if we try to add it as a reward token since it's the vault
+        vm.expectRevert("!auction");
+        strategy.kickAuction(curveLendVault);
+
+        // deploy more auctions!
+        Auction wrongAuction = new Auction();
+
+        // init the auction contract with wrong recipient
+        wrongAuction.initialize(
+            address(asset),
+            management, // this should be the strategy
+            management,
+            86400,
+            1_000_000
+        );
+        vm.expectRevert("wrong receiver");
+        strategy.setAuction(address(wrongAuction));
+
+        // deploy more auctions!
+        wrongAuction = new Auction();
+
+        // init the auction contract with wrong want
+        wrongAuction.initialize(
+            address(crv), // this should be asset()
+            address(strategy),
+            management,
+            86400,
+            1_000_000
+        );
+        vm.expectRevert("wrong want");
+        strategy.setAuction(address(wrongAuction));
     }
 }

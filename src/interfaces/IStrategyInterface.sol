@@ -14,6 +14,8 @@ interface IStrategyInterface is IBase4626Compounder, ITradeFactorySwapper {
 
     function gauge() external view returns (address);
 
+    function proxy() external view returns (address);
+
     function addToken(address) external;
 
     function setTradeFactory(address) external;
@@ -50,4 +52,8 @@ interface IStrategyInterface is IBase4626Compounder, ITradeFactorySwapper {
     ) external;
 
     function kickAuction(address _token) external returns (uint256);
+
+    function setProxy(address _proxy) external;
+
+    function setMinOutBps(uint256 _minOutBps) external;
 }
