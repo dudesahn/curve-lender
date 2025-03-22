@@ -83,4 +83,6 @@ interface IConvexBooster {
     function poolInfo(
         uint256
     ) external view returns (address, address, address, address, address, bool);
+
+    function earmarkRewards(uint256 pid) external;
 }

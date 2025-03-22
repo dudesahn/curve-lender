@@ -109,14 +109,12 @@ contract OracleTest is Setup {
 
         // we can pull APR without TVL
         uint256 strategyApr = checkOracle(address(strategy), 0);
+        uint256 lendingApr;
 
         if (useConvex) {
             (uint256 crvApr, uint256 cvxApr, uint256 finalApr) = convexOracle
                 .getConvexApr(address(strategy), strategy.vault(), 0);
-            uint256 lendingApr = convexOracle.getLendingApr(
-                strategy.vault(),
-                0
-            );
+            lendingApr = convexOracle.getLendingApr(strategy.vault(), 0);
             console2.log("total lending + crv APR: %e", strategyApr);
             console2.log("lending APR: %e", lendingApr);
             console2.log("crvApr: %e", crvApr);
@@ -125,12 +123,29 @@ contract OracleTest is Setup {
         } else {
             (uint256 baseCrvApr, uint256 boost, uint256 boostedCrvApr) = oracle
                 .getCrvApr(address(strategy), strategy.vault(), 0);
-            uint256 lendingApr = oracle.getLendingApr(strategy.vault(), 0);
+            lendingApr = oracle.getLendingApr(strategy.vault(), 0);
             console2.log("total lending + crv APR: %e", strategyApr);
             console2.log("lending APR: %e", lendingApr);
             console2.log("baseCrvApr: %e", baseCrvApr);
             console2.log("boost: %e", boost);
             console2.log("boostedCrvApr: %e", boostedCrvApr);
+        }
+
+        // whale causes max util, so our interest should PAMP
+        bool isMaxUtil = causeMaxUtil();
+        if (!isMaxUtil) {
+            console2.log("Skip test, not max util for this market");
+            return;
+        } else {
+            console2.log("Max util to pump interest rate");
+            uint256 newLendingApr;
+            if (useConvex) {
+                newLendingApr = convexOracle.getLendingApr(strategy.vault(), 0);
+            } else {
+                newLendingApr = oracle.getLendingApr(strategy.vault(), 0);
+            }
+            console2.log("max lending APR: %e", newLendingApr);
+            assertGt(newLendingApr, lendingApr, "!maxutil");
         }
     }
 

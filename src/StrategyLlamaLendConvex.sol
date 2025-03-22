@@ -156,6 +156,8 @@ contract StrategyLlamaLendConvex is Base4626Compounder, TradeFactorySwapper {
         }
     }
 
+    // is it worth adding a hardcoded route for CVX as well? probably...********
+
     function _swapCrvToStable(uint256 _amount) internal {
         // atomic swaps should always be sent via private mempool but use price_oracle as backstop
         uint256 crvPrice = TRICRV.price_oracle(1);

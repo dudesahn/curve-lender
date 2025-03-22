@@ -15,7 +15,7 @@ import {LlamaLendConvexOracle} from "../../periphery/StrategyAprOracleConvex.sol
 // interfaces
 import {IStrategyInterface} from "../../interfaces/IStrategyInterface.sol";
 import {IV2StrategyInterface} from "../../interfaces/IV2StrategyInterface.sol";
-import {ICurveStrategyProxy} from "../../interfaces/ICrvusdInterfaces.sol";
+import {ICurveStrategyProxy, IConvexBooster} from "../../interfaces/ICrvusdInterfaces.sol";
 
 // Inherit the events so they can be checked if desired.
 import {IEvents} from "@tokenized-strategy/interfaces/IEvents.sol";
@@ -33,6 +33,18 @@ interface IFactory {
 
 interface IGauge {
     function deposit_reward_token(address, uint256) external;
+}
+
+interface IVault {
+    // use this to pull the controller address from the Curve 4626 Vault
+    function controller() external view returns (address);
+}
+
+interface IController {
+    // use this to borrow out funds
+    function create_loan(uint256 collateral, uint256 debt, uint256 n) external;
+
+    function collateral_token() external view returns (address);
 }
 
 contract Setup is ExtendedTest, IEvents {
@@ -53,6 +65,9 @@ contract Setup is ExtendedTest, IEvents {
 
     // whether we test our curve or convex strategy
     bool public useConvex;
+
+    // uint for which market we use
+    uint256 public useMarket;
 
     // addresses for deployment
     address public curveLendVault;
@@ -112,9 +127,13 @@ contract Setup is ExtendedTest, IEvents {
         // Set decimals
         decimals = asset.decimals();
 
+        /* ========== UPDATE THESE FOR TESTING ========== */
+
         // set market/gauge variables
-        uint256 useMarket = 2;
-        useConvex = false; // test commit
+        useMarket = 1;
+        useConvex = false;
+
+        /* ========== UPDATE THESE FOR TESTING ========== */
 
         // deploy our strategy factories
         curveFactory = new LlamaLendCurveFactory(
@@ -263,6 +282,10 @@ contract Setup is ExtendedTest, IEvents {
                 vm.prank(management);
                 strategy.setClaimFlags(false, false);
             }
+        } else {
+            // earmark rewards
+            IConvexBooster convexBooster = IConvexBooster(booster);
+            convexBooster.earmarkRewards(pid);
         }
 
         // deploy our oracles
@@ -279,6 +302,36 @@ contract Setup is ExtendedTest, IEvents {
         vm.label(address(strategy), "strategy");
         vm.label(performanceFeeRecipient, "performanceFeeRecipient");
         vm.label(emergencyAdmin, "SMS");
+    }
+
+    function causeMaxUtil() public returns (bool isMaxUtil) {
+        IController controller = IController(
+            IVault(strategy.vault()).controller()
+        );
+        if (useMarket == 0 || useMarket == 3 || useMarket == 4) {
+            address whale;
+            if (useMarket == 0) {
+                // wstETH
+                whale = 0xd85351181b3F264ee0FDFa94518464d7c3DefaDa;
+            } else if (useMarket == 3) {
+                // sUSDe
+                whale = 0xb99a2c4C1C4F1fc27150681B740396F6CE1cBcF5;
+            } else if (useMarket == 4) {
+                // tbtc
+                whale = 0xF8aaE8D5dd1d7697a4eC6F561737e68a2ab8539e;
+            }
+            ERC20 collateral_token = ERC20(controller.collateral_token());
+            vm.startPrank(whale);
+            collateral_token.approve(address(controller), type(uint256).max);
+            controller.create_loan(
+                collateral_token.balanceOf(whale),
+                asset.balanceOf(address(controller)),
+                50
+            ); // 50 bands
+            vm.stopPrank();
+            console2.log("Pushed market to max utilization");
+            isMaxUtil = true;
+        }
     }
 
     function setUpStrategy() public returns (address) {
