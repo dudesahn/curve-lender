@@ -28,8 +28,8 @@ contract LlamaLendCurveFactory {
         0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E;
 
     // yearn's veCRV voter address
-    IVoter internal constant VOTER =
-        IVoter(0xF147b8125d2ef93FB6965Db97D6746952a133934);
+    address internal constant strategyProxy =
+        0x78eDcb307AC1d1F8F5Fd070B377A6e69C8dcFC34;
 
     event NewCurveLender(address indexed strategy, address indexed vault);
 
@@ -63,8 +63,6 @@ contract LlamaLendCurveFactory {
         // We need to use the custom interface with the tokenized strategies available setters.
         // the only asset we will use in this factory is crvUSD
         // strategy checks that gauge and vault token match, so factory doesn't need to
-        address strategyProxy = VOTER.strategy();
-
         require(
             IProxy(strategyProxy).strategies(_gauge) == address(0),
             "strategy exists"

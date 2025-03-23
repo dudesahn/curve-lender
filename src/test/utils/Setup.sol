@@ -41,7 +41,7 @@ interface IVault {
 }
 
 interface IController {
-    // use this to borrow out funds
+    // use this to borrow out funds to push to max util
     function create_loan(uint256 collateral, uint256 debt, uint256 n) external;
 
     function collateral_token() external view returns (address);
@@ -127,13 +127,22 @@ contract Setup is ExtendedTest, IEvents {
         // Set decimals
         decimals = asset.decimals();
 
-        /* ========== UPDATE THESE FOR TESTING ========== */
+        /* ========== UPDATE THESE BELOW FOR TESTING ========== */
 
         // set market/gauge variables
         useMarket = 1;
+        // 0: wstETH (failing)
+        // 1: sDOLA (passing)
+        // 2: uWu (extra rewards) (failing)
+        // 3: sUSDe (failing)
+        // 4: tBTC (passing)
+        // 5: USD0 (failing)
+        // 6: ynETH dead (passing, no convex)
+        // 7: ynETH good (failing)
+
         useConvex = false;
 
-        /* ========== UPDATE THESE FOR TESTING ========== */
+        /* ========== UPDATE THESE ABOVE FOR TESTING ========== */
 
         // deploy our strategy factories
         curveFactory = new LlamaLendCurveFactory(
@@ -237,10 +246,15 @@ contract Setup is ExtendedTest, IEvents {
             curveLendGauge = 0x1d701D23CE74d5B721d24D668A79c44Db2D5A0AE;
             noYield = true;
         } else if (useMarket == 6) {
-            // ynETH (fully empty). will revert for convex
+            // ynETH dead market (fully empty, not approved on gauge controller). will revert for convex
             curveLendVault = 0xC6F7E164ed085b68d5DF20d264f70410CB0B7458;
             curveLendGauge = 0xe9cA32785e192abD1bcF4e9fa0160Dc47E93ED89;
             noYield = true;
+        } else if (useMarket == 7) {
+            // ynETH good market
+            curveLendVault = 0x52036c9046247C3358c987A2389FFDe6Ef8564c9;
+            curveLendGauge = 0x8966A85b414620ef460DeEaCD821c30c442C433F;
+            pid = 415;
         }
 
         // Deploy strategy and set variables
@@ -281,6 +295,10 @@ contract Setup is ExtendedTest, IEvents {
                 // ynETH (fully empty, not approved on gauge controller)
                 vm.prank(management);
                 strategy.setClaimFlags(false, false);
+            } else if (useMarket == 7) {
+                // ynETH good market
+                vm.prank(management);
+                strategy.setClaimFlags(true, false);
             }
         } else {
             // earmark rewards

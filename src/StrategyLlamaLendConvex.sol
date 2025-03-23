@@ -245,6 +245,11 @@ contract StrategyLlamaLendConvex is Base4626Compounder, TradeFactorySwapper {
         _setTradeFactory(_tradeFactory, address(asset));
     }
 
+    /**
+     * @notice Use to update our auction address.
+     * @dev Can only be called by management.
+     * @param _auction Address of new auction.
+     */
     function setAuction(address _auction) external onlyManagement {
         if (_auction != address(0)) {
             require(IAuction(_auction).want() == address(asset), "wrong want");

@@ -809,17 +809,6 @@ contract OperationTest is Setup {
 
     // test other assorted setters
     function test_setters() public {
-        if (!useConvex) {
-            // set proxy, only gov should be able to do this
-            vm.prank(management);
-            vm.expectRevert("!proxyGov");
-            strategy.setProxy(management);
-
-            // gov should be able to set it
-            vm.prank(chad);
-            strategy.setProxy(chad);
-        }
-
         // set min out bps
         vm.startPrank(management);
         vm.expectRevert("not bps");

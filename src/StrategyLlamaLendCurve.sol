@@ -25,7 +25,7 @@ contract StrategyLlamaLendCurve is Base4626Compounder, TradeFactorySwapper {
     }
 
     /// @notice Yearns strategyProxy, needed for interacting with our Curve Voter.
-    ICurveStrategyProxy public proxy;
+    ICurveStrategyProxy public immutable proxy;
 
     /// @notice Info about our rewards. See struct NatSpec for more details.
     RewardsInfo public rewardsInfo;
@@ -58,9 +58,6 @@ contract StrategyLlamaLendCurve is Base4626Compounder, TradeFactorySwapper {
     /// @notice CRV token address
     ERC20 internal constant CRV =
         ERC20(0xD533a949740bb3306d119CC777fa900bA034cd52);
-
-    /// @notice yChad, the only one who can update our strategy proxy address
-    address internal constant GOV = 0xFEB4acf3df3cDEA7399794D0869ef76A6EfAff52;
 
     /**
      * @param _asset Underlying asset to use for this strategy.
@@ -247,16 +244,6 @@ contract StrategyLlamaLendCurve is Base4626Compounder, TradeFactorySwapper {
     }
 
     /**
-     * @notice Use this to set or update our strategy proxy.
-     * @dev Only governance can set this.
-     * @param _strategyProxy Address of our curve strategy proxy.
-     */
-    function setProxy(address _strategyProxy) external {
-        require(msg.sender == GOV, "!proxyGov");
-        proxy = ICurveStrategyProxy(_strategyProxy);
-    }
-
-    /**
      * @notice Use to update our trade factory.
      * @dev Can only be called by management.
      * @param _tradeFactory Address of new trade factory.
@@ -265,6 +252,11 @@ contract StrategyLlamaLendCurve is Base4626Compounder, TradeFactorySwapper {
         _setTradeFactory(_tradeFactory, address(asset));
     }
 
+    /**
+     * @notice Use to update our auction address.
+     * @dev Can only be called by management.
+     * @param _auction Address of new auction.
+     */
     function setAuction(address _auction) external onlyManagement {
         if (_auction != address(0)) {
             require(IAuction(_auction).want() == address(asset), "wrong want");
