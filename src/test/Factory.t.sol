@@ -10,6 +10,7 @@ contract FactoryTest is Setup {
         super.setUp();
     }
 
+    // no need for explicit factory testing since we use the factory to deploy strategies in Setup.sol
     function test_factory_status() public {
         // confirm our mapping works
         if (useConvex) {

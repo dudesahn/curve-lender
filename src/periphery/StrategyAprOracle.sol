@@ -123,9 +123,6 @@ contract LlamaLendOracle {
         IGauge gauge = IGauge(strategy.gauge());
         IVault vault = IVault(_vault);
 
-        // recreate CRV and Reward APR calculations from yDaemon/yExporter
-        // tbh probbaly not worth doing the reward calculations yet since that will have to be custom per custom reward token
-
         uint256 gaugeWeight = ICurvePeriphery(GAUGE_CONTROLLER)
             .gauge_relative_weight(address(gauge));
 

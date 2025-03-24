@@ -150,10 +150,6 @@ contract LlamaLendConvexOracle {
         IStrategy strategy = IStrategy(_strategy);
         IRewards rewards = IRewards(strategy.rewardsContract());
         IVault vault = IVault(_vault);
-
-        // recreate CRV and Reward APR calculations from yDaemon/yExporter
-        // tbh probbaly not worth doing the reward calculations yet since that will have to be custom per custom reward token
-
         uint256 totalSupply = rewards.totalSupply();
 
         // adjust our voter gauge balance based on delta

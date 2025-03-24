@@ -15,7 +15,7 @@ import {LlamaLendConvexOracle} from "../../periphery/StrategyAprOracleConvex.sol
 // interfaces
 import {IStrategyInterface} from "../../interfaces/IStrategyInterface.sol";
 import {IV2StrategyInterface} from "../../interfaces/IV2StrategyInterface.sol";
-import {ICurveStrategyProxy, IConvexBooster} from "../../interfaces/ICrvusdInterfaces.sol";
+import {ICurveStrategyProxy, IConvexBooster, IConvexRewards} from "../../interfaces/ICrvusdInterfaces.sol";
 
 // Inherit the events so they can be checked if desired.
 import {IEvents} from "@tokenized-strategy/interfaces/IEvents.sol";
@@ -106,14 +106,15 @@ contract Setup is ExtendedTest, IEvents {
 
     // Fuzz from $0.01 of 1e6 stable coins up to 1 trillion of a 1e18 coin
     uint256 public maxFuzzAmount = 1e30;
-    uint256 public minFuzzAmount = 1e4;
+    uint256 public minFuzzAmount = 1e6; // 1e4-1e5 fails profit tests at base interest rates
     uint256 public minAprOracleFuzzAmount = 1e18; // at tiny deposits, APR may not change enough to detect
 
     // Default profit max unlock time is set for 10 days
     uint256 public profitMaxUnlockTime = 1 days;
 
-    // state var to use in case we have very low or zero yield; some of our assumptions break
-    bool public noYield;
+    // state vars to use in case we have very low or zero yield; some of our assumptions break
+    bool public noBaseYield;
+    bool public noCrvYield;
 
     LlamaLendOracle public oracle;
     LlamaLendConvexOracle public convexOracle;
@@ -130,15 +131,16 @@ contract Setup is ExtendedTest, IEvents {
         /* ========== UPDATE THESE BELOW FOR TESTING ========== */
 
         // set market/gauge variables
-        useMarket = 1;
-        // 0: wstETH (failing)
-        // 1: sDOLA (passing)
-        // 2: uWu (extra rewards) (failing)
-        // 3: sUSDe (failing)
-        // 4: tBTC (passing)
-        // 5: USD0 (failing)
-        // 6: ynETH dead (passing, no convex)
-        // 7: ynETH good (failing)
+        useMarket = 0;
+        // 0: wstETH (passing, passing)
+        // 1: sDOLA (passing, passing)
+        // 2: uWu (extra rewards) (passing, passing)
+        // 3: sUSDe (passing, passing)
+        // 4: tBTC (passing, passing)
+        // 5: USD0 (passing, no convex). 1 token borrowed.
+        // 6: ynETH dead (passing, no convex). empty market.
+        // 7: ynETH good (passing, passing). no meaningful base yield but CRV emissions.
+        // 8: RCH (passing, no convex). No borrows
 
         useConvex = false;
 
@@ -215,6 +217,7 @@ contract Setup is ExtendedTest, IEvents {
             curveLendGauge = 0xad7B288315b0d71D62827338251A8D89A98132A0;
             pid = 343;
             hasRewards = true;
+            noCrvYield = true;
             rewardToken = 0x55C08ca52497e2f1534B59E2917BF524D4765257;
 
             // simulate sifu adding more rewards to the gauge
@@ -241,20 +244,28 @@ contract Setup is ExtendedTest, IEvents {
             vm.prank(chad);
             strategyProxy.revokeStrategy(curveLendGauge);
         } else if (useMarket == 5) {
-            // USD0 (tiny TVL, not approved on gauge controller). will revert for convex
+            // USD0 (tiny TVL, 1 crvUSD borrowed, not approved on gauge controller). will revert for convex
             curveLendVault = 0x0111646E459e0BBa57daCA438262f3A092ae24C6;
             curveLendGauge = 0x1d701D23CE74d5B721d24D668A79c44Db2D5A0AE;
-            noYield = true;
+            noBaseYield = true;
+            noCrvYield = true;
         } else if (useMarket == 6) {
             // ynETH dead market (fully empty, not approved on gauge controller). will revert for convex
             curveLendVault = 0xC6F7E164ed085b68d5DF20d264f70410CB0B7458;
             curveLendGauge = 0xe9cA32785e192abD1bcF4e9fa0160Dc47E93ED89;
-            noYield = true;
+            noBaseYield = true;
+            noCrvYield = true;
         } else if (useMarket == 7) {
             // ynETH good market
             curveLendVault = 0x52036c9046247C3358c987A2389FFDe6Ef8564c9;
             curveLendGauge = 0x8966A85b414620ef460DeEaCD821c30c442C433F;
             pid = 415;
+        } else if (useMarket == 8) {
+            // RCH, literally 0 borrows, 2k deposited, not on gauge controller
+            curveLendVault = 0xc9cCB6E3Cc9D1766965278Bd1e7cc4e58549D1F8;
+            curveLendGauge = 0x11C2a9fac65809c527bcb04FB7EC52080F053dc0;
+            noBaseYield = true;
+            noCrvYield = true;
         }
 
         // Deploy strategy and set variables
@@ -299,11 +310,21 @@ contract Setup is ExtendedTest, IEvents {
                 // ynETH good market
                 vm.prank(management);
                 strategy.setClaimFlags(true, false);
+            } else if (useMarket == 8) {
+                // RCH no borrows, not approved
+                vm.prank(management);
+                strategy.setClaimFlags(false, false);
             }
         } else {
-            // earmark rewards
-            IConvexBooster convexBooster = IConvexBooster(booster);
-            convexBooster.earmarkRewards(pid);
+            // check if there is any CRV we need to earmark
+            IConvexRewards rewardsContract = IConvexRewards(
+                strategy.rewardsContract()
+            );
+            uint256 crvExpiry = rewardsContract.periodFinish();
+            // important to only earmark when needed or else convex booster will revert
+            if (crvExpiry < block.timestamp) {
+                IConvexBooster(booster).earmarkRewards(pid);
+            }
         }
 
         // deploy our oracles

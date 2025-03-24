@@ -16,24 +16,46 @@ contract OracleTest is Setup {
         address _strategy,
         uint256 _delta
     ) public returns (uint256 currentApr) {
-        // Check set up
-        // TODO: Add checks for the setup
-
         // don't bother testing our oracle if we don't have yield
-        if (noYield) {
+        // NOTE: we don't currently consider extra token rewards. if needed, update oracle to add these in.
+        if (noBaseYield && noCrvYield) {
             return 0;
         }
 
         if (useConvex) {
-            currentApr = convexOracle.aprAfterDebtChange(_strategy, 0);
+            // if a convex rewards contract has tiny supply, just return (added because uWu is empty w/ old rewards)
+            if (
+                ERC20(strategy.rewardsContract()).totalSupply() < 1_000_000e18
+            ) {
+                // note this is really just 1000 crvUSD, since deposits are diluted 1000:1
+                return 0;
+            }
 
-            // Should be greater than 0 but likely less than 100%
+            currentApr = convexOracle.aprAfterDebtChange(_strategy, 0);
+            uint256 testLendingApr = convexOracle.getLendingApr(
+                strategy.vault(),
+                0
+            );
+            (
+                uint256 testCrveApr,
+                uint256 testConvexApr,
+                uint256 testFinalApr
+            ) = convexOracle.getConvexApr(
+                    address(strategy),
+                    strategy.vault(),
+                    0
+                );
+
+            // Should be greater than 0 but likely less than 50%
+            assertLt(testLendingApr, 5e17, "lending +50%");
+            assertLt(testCrveApr, 5e17, "curve +50%");
+            assertLt(testConvexApr, 5e17, "convex +50%");
+            assertLt(testFinalApr, 5e17, "final +50%");
             assertGt(currentApr, 0, "ZERO");
-            assertLt(currentApr, 1e18, "+100%");
+            assertLt(currentApr, 5e17, "fart +50%");
 
             // no need to do anything else if we're not changing
             if (_delta != 0) {
-                // TODO: Uncomment to test the apr goes up and down based on debt changes
                 uint256 negativeDebtChangeApr = convexOracle.aprAfterDebtChange(
                     _strategy,
                     -int256(_delta)
@@ -47,6 +69,7 @@ contract OracleTest is Setup {
                     int256(_delta)
                 );
 
+                // The apr should go down if deposits go up
                 assertGt(currentApr, positiveDebtChangeApr, "positive change");
             }
         } else {
@@ -58,7 +81,6 @@ contract OracleTest is Setup {
 
             // no need to do anything else if we're not changing
             if (_delta != 0) {
-                // TODO: Uncomment to test the apr goes up and down based on debt changes
                 uint256 negativeDebtChangeApr = oracle.aprAfterDebtChange(
                     _strategy,
                     -int256(_delta)
@@ -72,21 +94,10 @@ contract OracleTest is Setup {
                     int256(_delta)
                 );
 
+                // The apr should go down if deposits go up
                 assertGt(currentApr, positiveDebtChangeApr, "positive change");
             }
         }
-
-        // TODO: Uncomment if there are setter functions to test.
-        /**
-        vm.expectRevert("!governance");
-        vm.prank(user);
-        oracle.setterFunction(setterVariable);
-
-        vm.prank(management);
-        oracle.setterFunction(setterVariable);
-
-        assertEq(oracle.setterVariable(), setterVariable);
-        */
     }
 
     function test_oracle_fuzzy(uint256 _amount, uint16 _percentChange) public {
@@ -151,7 +162,7 @@ contract OracleTest is Setup {
 
     function test_oracle_decrease_debt() public {
         // don't bother testing our oracle if we don't have yield
-        if (noYield) {
+        if (noBaseYield && noCrvYield) {
             return;
         }
         console2.log(
@@ -275,7 +286,7 @@ contract OracleTest is Setup {
 
     function test_oracle_increase_debt() public {
         // don't bother testing our oracle if we don't have yield
-        if (noYield) {
+        if (noBaseYield && noCrvYield) {
             return;
         }
         console2.log(
