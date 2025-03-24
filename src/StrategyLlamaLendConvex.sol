@@ -98,6 +98,7 @@ contract StrategyLlamaLendConvex is Base4626Compounder, TradeFactorySwapper {
     /* ========== BASE4626 FUNCTIONS ========== */
 
     /// @notice Balance of 4626 vault tokens staked in convex
+    /// @dev Note that Curve Lend vaults are diluted 1000:1 on deposit
     function balanceOfStake() public view override returns (uint256 stake) {
         stake = rewardsContract.balanceOf(address(this));
     }
@@ -113,7 +114,7 @@ contract StrategyLlamaLendConvex is Base4626Compounder, TradeFactorySwapper {
     }
 
     function vaultsMaxWithdraw() public view override returns (uint256) {
-        // we use the gauge address here since that's where our strategy proxy deposits the LP
+        // we use the gauge address here since that's where our convex's voter deposits the LP
         // should be the minimum of what the gauge can redeem (limited by utilization), and our staked balance + loose vault tokens
         return
             vault.convertToAssets(
@@ -122,6 +123,11 @@ contract StrategyLlamaLendConvex is Base4626Compounder, TradeFactorySwapper {
                     balanceOfStake() + balanceOfVault()
                 )
             );
+    }
+
+    // allow keepers to deposit idle profit to curve lend positions as needed
+    function _tend(uint256 _totalIdle) internal override {
+        _deployFunds(_totalIdle);
     }
 
     /* ========== TRADE FACTORY & AUCTION FUNCTIONS ========== */
