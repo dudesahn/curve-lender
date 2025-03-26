@@ -87,8 +87,12 @@ contract LlamaLendConvexFactory {
     function isDeployedStrategy(
         address _strategy
     ) external view returns (bool) {
-        address _vault = IStrategyInterface(_strategy).vault();
-        return deployments[_vault] == _strategy;
+        try IStrategyInterface(_strategy).vault() returns (address _vault) {
+            return deployments[_vault] == _strategy;
+        } catch {
+            // If the call fails or reverts, return false
+            return false;
+        }
     }
 
     /**
