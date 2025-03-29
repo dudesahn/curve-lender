@@ -413,7 +413,7 @@ contract OracleTest is Setup {
         assertGt(currentApr, 0, "ZERO");
         assertLt(currentApr, 1e18, "+100%");
         console2.log("Current Frax APR:", currentApr);
-        
+
         // set our delta
         uint256 _delta = 1_000e18;
 
