@@ -2,6 +2,7 @@ pragma solidity ^0.8.18;
 
 import "forge-std/console2.sol";
 import {ERC20, Setup} from "./utils/Setup.sol";
+import {FraxLend4626Oracle} from "../periphery/FraxLend4626Oracle.sol";
 
 interface ICurveVault {
     function collateral_token() external view returns (address);
@@ -402,5 +403,34 @@ contract OracleTest is Setup {
         }
     }
 
-    // TODO: Deploy multiple strategies with different tokens as `asset` to test against the oracle.
+    function test_frax_oracle() public {
+        // don't bother testing our oracle if we don't have yield
+        address _strategy = 0x8E5f09de0cD7841239410F929A905E214443d9E0;
+        FraxLend4626Oracle fraxOracle = new FraxLend4626Oracle();
+        uint256 currentApr = fraxOracle.aprAfterDebtChange(_strategy, 0);
+
+        // Should be greater than 0 but likely less than 100%
+        assertGt(currentApr, 0, "ZERO");
+        assertLt(currentApr, 1e18, "+100%");
+        console2.log("Current Frax APR:", currentApr);
+        
+        // set our delta
+        uint256 _delta = 1_000e18;
+
+        uint256 negativeDebtChangeApr = fraxOracle.aprAfterDebtChange(
+            _strategy,
+            -int256(_delta)
+        );
+
+        // The apr should go up if deposits go down
+        assertLt(currentApr, negativeDebtChangeApr, "negative change");
+
+        uint256 positiveDebtChangeApr = fraxOracle.aprAfterDebtChange(
+            _strategy,
+            int256(_delta)
+        );
+
+        // The apr should go down if deposits go up
+        assertGt(currentApr, positiveDebtChangeApr, "positive change");
+    }
 }
