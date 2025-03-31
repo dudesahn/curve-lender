@@ -44,11 +44,11 @@ contract StrategyLlamaLendCurve is Base4626Compounder, TradeFactorySwapper {
     /// @dev Used to set different swap methods for each reward token.
     mapping(address => SwapType) public swapType;
 
-    /// @notice All reward tokens sold by this strategy by any method.
-    address[] public allRewardTokens;
-
     /// @notice Minimum amount out in BPS based on oracle pricing. 9900 = 1% slippage allowed
     uint256 public minOutBps = 9900;
+
+    /// @notice All reward tokens sold by this strategy by any method.
+    address[] internal allRewardTokens;
 
     /// @notice Address for TriCRV pool to sell CRV => crvUSD
     IPool internal constant TRICRV =
@@ -141,15 +141,14 @@ contract StrategyLlamaLendCurve is Base4626Compounder, TradeFactorySwapper {
         address[] memory _allRewardTokens = allRewardTokens;
         uint256 _length = _allRewardTokens.length;
 
-        // should really re-work all of this based on CRV selling
-
         for (uint256 i; i < _length; ++i) {
             address token = _allRewardTokens[i];
             SwapType _swapType = swapType[token];
-            uint256 balance = ERC20(token).balanceOf(address(this));
 
-            if (balance > minAmountToSellMapping[token]) {
-                if (_swapType == SwapType.TRICRV && token == address(CRV)) {
+            // only crv can be sold atomically, all others via auction/tf
+            if (_swapType == SwapType.TRICRV && token == address(CRV)) {
+                uint256 balance = ERC20(token).balanceOf(address(this));
+                if (balance > minAmountToSellMapping[token]) {
                     _swapCrvToStable(balance);
                 }
             }
@@ -221,6 +220,7 @@ contract StrategyLlamaLendCurve is Base4626Compounder, TradeFactorySwapper {
             if (_allRewardTokens[i] == _token) {
                 allRewardTokens[i] = _allRewardTokens[_length - 1];
                 allRewardTokens.pop();
+                break;
             }
         }
         delete swapType[_token];
