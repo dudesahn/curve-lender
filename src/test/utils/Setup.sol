@@ -5,17 +5,18 @@ import "forge-std/console2.sol";
 import {ExtendedTest} from "./ExtendedTest.sol";
 
 // contracts
-import {StrategyLlamaLendCurve, ERC20} from "../../StrategyLlamaLendCurve.sol";
-import {StrategyLlamaLendConvex} from "../../StrategyLlamaLendConvex.sol";
-import {LlamaLendCurveFactory} from "../../LlamaLendCurveFactory.sol";
-import {LlamaLendConvexFactory} from "../../LlamaLendConvexFactory.sol";
-import {LlamaLendOracle} from "../../periphery/StrategyAprOracle.sol";
-import {LlamaLendConvexOracle} from "../../periphery/StrategyAprOracleConvex.sol";
+import {StrategyLlamaLendCurve, ERC20} from "src/StrategyLlamaLendCurve.sol";
+import {StrategyLlamaLendConvex} from "src/StrategyLlamaLendConvex.sol";
+import {LlamaLendCurveFactory} from "src/LlamaLendCurveFactory.sol";
+import {LlamaLendConvexFactory} from "src/LlamaLendConvexFactory.sol";
+import {LlamaLendOracle} from "src/periphery/StrategyAprOracle.sol";
+import {LlamaLendConvexOracle} from "src/periphery/StrategyAprOracleConvex.sol";
 
 // interfaces
-import {IStrategyInterface} from "../../interfaces/IStrategyInterface.sol";
-import {IV2StrategyInterface} from "../../interfaces/IV2StrategyInterface.sol";
-import {ICurveStrategyProxy, IConvexBooster, IConvexRewards} from "../../interfaces/ICrvusdInterfaces.sol";
+import {IStrategyInterface} from "src/interfaces/IStrategyInterface.sol";
+import {IV2StrategyInterface} from "src/interfaces/IV2StrategyInterface.sol";
+import {IProxy, IGauge, IVault, IController} from "src/interfaces/ICurveInterfaces.sol";
+import {IConvexBooster, IConvexRewards} from "src/interfaces/IConvexInterfaces.sol";
 
 // Inherit the events so they can be checked if desired.
 import {IEvents} from "@tokenized-strategy/interfaces/IEvents.sol";
@@ -29,22 +30,6 @@ interface IFactory {
     function set_protocol_fee_bps(uint16) external;
 
     function set_protocol_fee_recipient(address) external;
-}
-
-interface IGauge {
-    function deposit_reward_token(address, uint256) external;
-}
-
-interface IVault {
-    // use this to pull the controller address from the Curve 4626 Vault
-    function controller() external view returns (address);
-}
-
-interface IController {
-    // use this to borrow out funds to push to max util
-    function create_loan(uint256 collateral, uint256 debt, uint256 n) external;
-
-    function collateral_token() external view returns (address);
 }
 
 contract Setup is ExtendedTest, IEvents {
@@ -83,8 +68,8 @@ contract Setup is ExtendedTest, IEvents {
         0xF403C135812408BFbE8713b5A23a04b3D48AAE31;
 
     // yearn's strategy proxy and voter
-    ICurveStrategyProxy public constant strategyProxy =
-        ICurveStrategyProxy(0x78eDcb307AC1d1F8F5Fd070B377A6e69C8dcFC34);
+    IProxy public constant strategyProxy =
+        IProxy(0x78eDcb307AC1d1F8F5Fd070B377A6e69C8dcFC34);
     address public constant voter = 0xF147b8125d2ef93FB6965Db97D6746952a133934;
 
     // trade factory and rewards stuff

@@ -1,18 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity ^0.8.18;
 
-import {StrategyLlamaLendCurve} from "./StrategyLlamaLendCurve.sol";
-import {IStrategyInterface} from "./interfaces/IStrategyInterface.sol";
-
-interface IVoter {
-    function strategy() external view returns (address);
-}
-
-interface IProxy {
-    function approveStrategy(address _gauge, address _strategy) external;
-
-    function strategies(address) external view returns (address);
-}
+import {StrategyLlamaLendCurve} from "src/StrategyLlamaLendCurve.sol";
+import {IStrategyInterface} from "src/interfaces/IStrategyInterface.sol";
+import {IVoter, IProxy} from "src/interfaces/ICurveInterfaces.sol";
 
 contract LlamaLendCurveFactory {
     address public management;

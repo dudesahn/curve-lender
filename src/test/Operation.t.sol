@@ -2,7 +2,7 @@
 pragma solidity ^0.8.18;
 
 import "forge-std/console2.sol";
-import {Setup, ERC20, Auction, IStrategyInterface} from "./utils/Setup.sol";
+import {Setup, ERC20, Auction, IStrategyInterface} from "src/test/utils/Setup.sol";
 
 contract OperationTest is Setup {
     function setUp() public virtual override {
