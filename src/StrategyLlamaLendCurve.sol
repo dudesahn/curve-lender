@@ -99,7 +99,8 @@ contract StrategyLlamaLendCurve is Base4626Compounder, TradeFactorySwapper {
 
     function vaultsMaxWithdraw() public view override returns (uint256) {
         // we use the gauge address here since that's where our strategy proxy deposits the LP
-        // should be the minimum of what the gauge can redeem (limited by utilization), and our staked balance + loose vault tokens
+        // should be the minimum of what the gauge can redeem (limited by utilization),
+        //  and our staked balance + loose vault tokens
         return
             vault.convertToAssets(
                 Math.min(

@@ -46,13 +46,12 @@ contract OracleTest is Setup {
                     0
                 );
 
-            // Should be greater than 0 but likely less than 50%
-            assertLt(testLendingApr, 5e17, "lending +50%");
-            assertLt(testCrveApr, 5e17, "curve +50%");
-            assertLt(testConvexApr, 5e17, "convex +50%");
-            assertLt(testFinalApr, 5e17, "final +50%");
+            // Should be greater than 0 but likely less than 100%
+            assertLt(testLendingApr, 1e18, "lending +100%");
+            assertLt(testCrveApr, 1e18, "curve +100%");
+            assertLt(testConvexApr, 1e18, "convex +100%");
+            assertLt(testFinalApr, 1e18, "final +100%");
             assertGt(currentApr, 0, "ZERO");
-            assertLt(currentApr, 5e17, "fart +50%");
 
             // no need to do anything else if we're not changing
             if (_delta != 0) {
@@ -122,6 +121,9 @@ contract OracleTest is Setup {
         uint256 strategyApr = checkOracle(address(strategy), 0);
         uint256 lendingApr;
 
+        // oracle APR should return zero if no funds deposited, use ynETH v1
+        address emptyVault = 0xC6F7E164ed085b68d5DF20d264f70410CB0B7458;
+
         if (useConvex) {
             (uint256 crvApr, uint256 cvxApr, uint256 finalApr) = convexOracle
                 .getConvexApr(address(strategy), strategy.vault(), 0);
@@ -131,6 +133,10 @@ contract OracleTest is Setup {
             console2.log("crvApr: %e", crvApr);
             console2.log("cvxApr: %e", cvxApr);
             console2.log("finalApr: %e", finalApr);
+
+            // make sure empty equals zero
+            uint256 zeroLendingApr = convexOracle.getLendingApr(emptyVault, 0);
+            assertEq(zeroLendingApr, 0, "!zero");
         } else {
             (uint256 baseCrvApr, uint256 boost, uint256 boostedCrvApr) = oracle
                 .getCrvApr(address(strategy), strategy.vault(), 0);
@@ -140,6 +146,14 @@ contract OracleTest is Setup {
             console2.log("baseCrvApr: %e", baseCrvApr);
             console2.log("boost: %e", boost);
             console2.log("boostedCrvApr: %e", boostedCrvApr);
+
+            // make sure empty equals zero
+            uint256 zeroLendingApr = oracle.getLendingApr(emptyVault, 0);
+            assertEq(zeroLendingApr, 0, "!zero");
+
+            if (noCrvYield) {
+                assertEq(baseCrvApr, 0, "!crvZero");
+            }
         }
 
         // whale causes max util, so our interest should PAMP

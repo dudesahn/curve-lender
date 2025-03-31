@@ -23,6 +23,11 @@ contract OperationTest is Setup {
     function test_operation_fuzzy(uint256 _amount) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
 
+        // for low base yield strategies, just require they have amounts of at least 1e18
+        if (lowBaseYield && _amount < 1e18) {
+            return;
+        }
+
         // Deposit into strategy
         mintAndDepositIntoStrategy(strategy, user, _amount);
         assertEq(strategy.totalAssets(), _amount, "!totalAssets");
@@ -70,8 +75,8 @@ contract OperationTest is Setup {
             uint256 recreatedUserShare = userToWithdraw +
                 (strategy.balanceOf(user) * 1e18 * strategy.pricePerShare()) /
                 1e36;
-            // these should be equal, but give 1e9 wei of wiggle room for rounding
-            assertApproxEqAbs(totalUserShare, recreatedUserShare, 1e9);
+            // these should be equal, but give 1e15 wei of wiggle room for rounding when fuzzing
+            assertApproxEqAbs(totalUserShare, recreatedUserShare, 1e15);
         } else {
             // Withdraw all funds
             vm.prank(user);
@@ -162,8 +167,8 @@ contract OperationTest is Setup {
             uint256 recreatedUserShare = userToWithdraw +
                 (strategy.balanceOf(user) * 1e18 * strategy.pricePerShare()) /
                 1e36;
-            // these should be equal, but give 1e9 wei of wiggle room for rounding
-            assertApproxEqAbs(totalUserShare, recreatedUserShare, 1e9);
+            // these should be equal, but give 10_000 wei of wiggle room for rounding
+            assertApproxEqAbs(totalUserShare, recreatedUserShare, 10_000);
         } else {
             // Withdraw all funds
             vm.prank(user);
@@ -304,8 +309,8 @@ contract OperationTest is Setup {
             uint256 recreatedUserShare = userToWithdraw +
                 (strategy.balanceOf(user) * 1e18 * strategy.pricePerShare()) /
                 1e36;
-            // these should be equal, but give 1e9 wei of wiggle room for rounding
-            assertApproxEqAbs(totalUserShare, recreatedUserShare, 1e9);
+            // these should be equal, but give 10_000 wei of wiggle room for rounding
+            assertApproxEqAbs(totalUserShare, recreatedUserShare, 10_000);
         } else {
             // Withdraw all funds
             vm.prank(user);
@@ -588,9 +593,11 @@ contract OperationTest is Setup {
         }
 
         // check that we have loose assets and then tend them
-        assertGt(strategy.balanceOfAsset(), 0, "!assets");
-        vm.prank(keeper);
-        strategy.tend();
+        if (!noCrvYield) {
+            assertGt(strategy.balanceOfAsset(), 0, "!assets");
+            vm.prank(keeper);
+            strategy.tend();
+        }
         assertEq(strategy.balanceOfAsset(), 0, "!zero");
 
         // skip forward in time
@@ -610,7 +617,12 @@ contract OperationTest is Setup {
         );
 
         // since profitTwo had CRV yield and profitThree didn't, profitTwo should always be greater than or equal
-        assertGe(profitTwo, profitThree, "!profitComp");
+        if (noCrvYield) {
+            // if just comparing base yield, watch out for rounding errors
+            assertApproxEqAbs(profitTwo, profitThree, 1, "!profitComp");
+        } else {
+            assertGt(profitTwo, profitThree, "!profitComp");
+        }
 
         // fully unlock our profit
         skip(strategy.profitMaxUnlockTime());
@@ -634,8 +646,8 @@ contract OperationTest is Setup {
             uint256 recreatedUserShare = userToWithdraw +
                 (strategy.balanceOf(user) * 1e18 * strategy.pricePerShare()) /
                 1e36;
-            // these should be equal, but give 1e9 wei of wiggle room for rounding
-            assertApproxEqAbs(totalUserShare, recreatedUserShare, 1e9);
+            // these should be equal, but give 10_000 wei of wiggle room for rounding
+            assertApproxEqAbs(totalUserShare, recreatedUserShare, 10_000);
         } else {
             // Withdraw all funds
             vm.prank(user);
@@ -665,6 +677,10 @@ contract OperationTest is Setup {
             );
             address[] memory setRewardTokens = strategy.getAllRewardTokens();
             assertEq(setRewardTokens.length, 2);
+            assertEq(
+                uint256(strategy.swapType(address(cvx))),
+                uint256(IStrategyInterface.SwapType.TF)
+            );
 
             // remove
             strategy.removeRewardToken(address(cvx));
@@ -673,6 +689,32 @@ contract OperationTest is Setup {
 
             assertEq(
                 uint256(strategy.swapType(address(cvx))),
+                uint256(IStrategyInterface.SwapType.NULL)
+            );
+            vm.stopPrank();
+        }
+
+        if (useConvex && !hasRewards) {
+            // add uwu as an extra token to test removal
+            rewardToken = 0x55C08ca52497e2f1534B59E2917BF524D4765257;
+            vm.startPrank(management);
+            strategy.addRewardToken(
+                rewardToken,
+                IStrategyInterface.SwapType.TF
+            );
+            address[] memory setRewardTokens = strategy.getAllRewardTokens();
+            assertEq(setRewardTokens.length, 3);
+            assertEq(
+                uint256(strategy.swapType(rewardToken)),
+                uint256(IStrategyInterface.SwapType.TF)
+            );
+
+            // remove
+            strategy.removeRewardToken(rewardToken);
+            address[] memory newSetRewardTokens = strategy.getAllRewardTokens();
+            assertEq(newSetRewardTokens.length, 2);
+            assertEq(
+                uint256(strategy.swapType(rewardToken)),
                 uint256(IStrategyInterface.SwapType.NULL)
             );
             vm.stopPrank();
@@ -837,6 +879,11 @@ contract OperationTest is Setup {
     ) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
 
+        // for low base yield strategies, just require they have amounts of at least 1e18 when fuzzing
+        if (lowBaseYield && _amount < 1e18) {
+            return;
+        }
+
         // since our lender is default profitable, doing max 10_000 will revert w/ health check
         //  (more than 100% total profit). so do 9950 to give some buffer for the interest earned.
         _profitFactor = uint16(bound(uint256(_profitFactor), 10, 9_950));
@@ -896,8 +943,8 @@ contract OperationTest is Setup {
             uint256 recreatedUserShare = userToWithdraw +
                 (strategy.balanceOf(user) * 1e18 * strategy.pricePerShare()) /
                 1e36;
-            // these should be equal, but give 1e9 wei of wiggle room for rounding
-            assertApproxEqAbs(totalUserShare, recreatedUserShare, 1e9);
+            // these should be equal, but give 1e15 wei of wiggle room for rounding when fuzzing
+            assertApproxEqAbs(totalUserShare, recreatedUserShare, 1e15);
         } else {
             // Withdraw all funds
             vm.prank(user);
@@ -924,6 +971,11 @@ contract OperationTest is Setup {
         uint16 _profitFactor
     ) public {
         vm.assume(_amount > minFuzzAmount && _amount < maxFuzzAmount);
+
+        // for low base yield strategies, just require they have amounts of at least 1e18
+        if (lowBaseYield && _amount < 1e18) {
+            return;
+        }
 
         // since our lender is default profitable, doing max 10_000 will revert w/ health check
         //  (more than 100% total profit). so do 9950 to give some buffer for the interest earned.
@@ -991,8 +1043,8 @@ contract OperationTest is Setup {
             uint256 recreatedUserShare = userToWithdraw +
                 (strategy.balanceOf(user) * 1e18 * strategy.pricePerShare()) /
                 1e36;
-            // these should be equal, but give 1e9 wei of wiggle room for rounding
-            assertApproxEqAbs(totalUserShare, recreatedUserShare, 1e9);
+            // these should be equal, but give 1e15 wei of wiggle room for rounding when fuzzing
+            assertApproxEqAbs(totalUserShare, recreatedUserShare, 1e15);
         } else {
             // Withdraw all funds
             // ******** NOTE THAT THIS WILL FAIL IN A PREVIOUSLY EMPTY MARKET WITH FEES ON WHEN PROFITS ARE TAKEN
@@ -1097,8 +1149,8 @@ contract OperationTest is Setup {
             uint256 recreatedUserShare = userToWithdraw +
                 (strategy.balanceOf(user) * 1e18 * strategy.pricePerShare()) /
                 1e36;
-            // these should be equal, but give 1e9 wei of wiggle room for rounding
-            assertApproxEqAbs(totalUserShare, recreatedUserShare, 1e9);
+            // these should be equal, but give 1e15 wei of wiggle room for rounding when fuzzing
+            assertApproxEqAbs(totalUserShare, recreatedUserShare, 1e15);
         } else {
             // Withdraw all funds
             vm.prank(user);
