@@ -3,9 +3,9 @@ pragma solidity ^0.8.18;
 
 import {Base4626Compounder, ERC20, SafeERC20, Math} from "@periphery/Bases/4626Compounder/Base4626Compounder.sol";
 import {TradeFactorySwapper} from "@periphery/swappers/TradeFactorySwapper.sol";
-import {IConvexBooster, IConvexRewards} from "./interfaces/ICrvusdInterfaces.sol";
-import {IAuction} from "./interfaces/IAuction.sol";
-import {IPool} from "./interfaces/IPool.sol";
+import {IPool} from "src/interfaces/ICurveInterfaces.sol";
+import {IConvexBooster, IConvexRewards} from "src/interfaces/IConvexInterfaces.sol";
+import {IAuction} from "src/interfaces/IAuction.sol";
 
 contract StrategyLlamaLendConvex is Base4626Compounder, TradeFactorySwapper {
     using SafeERC20 for ERC20;

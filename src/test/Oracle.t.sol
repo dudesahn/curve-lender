@@ -1,7 +1,7 @@
 pragma solidity ^0.8.18;
 
 import "forge-std/console2.sol";
-import {ERC20, Setup} from "./utils/Setup.sol";
+import {ERC20, Setup} from "src/test/utils/Setup.sol";
 
 interface ICurveVault {
     function collateral_token() external view returns (address);

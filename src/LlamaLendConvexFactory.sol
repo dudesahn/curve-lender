@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity ^0.8.18;
 
-import {StrategyLlamaLendConvex} from "./StrategyLlamaLendConvex.sol";
-import {IStrategyInterface} from "./interfaces/IStrategyInterface.sol";
-
-// test commit
+import {StrategyLlamaLendConvex} from "src/StrategyLlamaLendConvex.sol";
+import {IStrategyInterface} from "src/interfaces/IStrategyInterface.sol";
 
 contract LlamaLendConvexFactory {
     address public management;

@@ -1,80 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity ^0.8.18;
 
-// example of FE APY calcs: https://github.com/Gearbox-protocol/sdk/blob/next/src/gearboxRewards/apy.ts
-// https://github.com/Gearbox-protocol/defillama/blob/7127e015b2dc3f47043292e8801d01930560003c/src/yield-server/index.ts#L242
-
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-
-interface IStrategy {
-    function vault() external view returns (address);
-
-    function rewardsContract() external view returns (address);
-
-    function gauge() external view returns (address);
-}
-
-interface IVault {
-    function pricePerShare() external view returns (uint256);
-
-    function totalAssets() external view returns (uint256);
-
-    function controller() external view returns (address);
-
-    function amm() external view returns (address);
-}
-
-interface ICurvePeriphery {
-    function total_debt() external view returns (uint256);
-
-    function rate() external view returns (uint256);
-
-    function gauge_relative_weight(address) external view returns (uint256);
-}
-
-interface IRewards {
-    function totalSupply() external view returns (uint256);
-
-    function rewardRate() external view returns (uint256);
-
-    function periodFinish() external view returns (uint256);
-}
-
-interface IGauge {
-    function inflation_rate() external view returns (uint256);
-
-    function working_supply() external view returns (uint256);
-
-    function totalSupply() external view returns (uint256);
-
-    function working_balances(address) external view returns (uint256);
-
-    function balanceOf(address) external view returns (uint256);
-}
-
-interface ICurvePool {
-    function get_dy(
-        uint256 i,
-        uint256 j,
-        uint256 dx
-    ) external view returns (uint256);
-}
-
-interface IOracle {
-    function latestRoundData(
-        address,
-        address
-    )
-        external
-        view
-        returns (
-            uint80 roundId,
-            uint256 answer,
-            uint256 startedAt,
-            uint256 updatedAt,
-            uint80 answeredInRound
-        );
-}
+import {IStrategyInterface} from "src/interfaces/IStrategyInterface.sol";
+import {IVault, IPeriphery, IGauge, IPool} from "src/interfaces/ICurveInterfaces.sol";
+import {IConvexRewards} from "src/interfaces/IConvexInterfaces.sol";
+import {IOracle} from "src/interfaces/IChainlinkOracle.sol";
 
 contract LlamaLendConvexOracle {
     address internal constant TRI_CRV_USD_CURVE_POOL =
@@ -103,7 +34,7 @@ contract LlamaLendConvexOracle {
         address _strategy,
         int256 _delta
     ) external view returns (uint256) {
-        address vault = IStrategy(_strategy).vault();
+        address vault = IStrategyInterface(_strategy).vault();
 
         uint256 lend_apr = getLendingApr(vault, _delta);
 
@@ -136,9 +67,9 @@ contract LlamaLendConvexOracle {
         // self.amm.rate() * (365 * 86400) * debt / self._total_assets()
 
         lend_apr =
-            (ICurvePeriphery(vault.amm()).rate() *
+            (IPeriphery(vault.amm()).rate() *
                 (365 * 86400) *
-                ICurvePeriphery(vault.controller()).total_debt()) /
+                IPeriphery(vault.controller()).total_debt()) /
             assets;
     }
 
@@ -147,8 +78,8 @@ contract LlamaLendConvexOracle {
         address _vault,
         int256 _delta
     ) public view returns (uint256 crvApr, uint256 cvxApr, uint256 finalApr) {
-        IStrategy strategy = IStrategy(_strategy);
-        IRewards rewards = IRewards(strategy.rewardsContract());
+        IStrategyInterface strategy = IStrategyInterface(_strategy);
+        IConvexRewards rewards = IConvexRewards(strategy.rewardsContract());
         IVault vault = IVault(_vault);
         uint256 totalSupply = rewards.totalSupply();
 
@@ -160,11 +91,7 @@ contract LlamaLendConvexOracle {
         }
 
         // pull CRV price from TriCRV pool
-        uint256 crvPrice = ICurvePool(TRI_CRV_USD_CURVE_POOL).get_dy(
-            2,
-            0,
-            1e18
-        );
+        uint256 crvPrice = IPool(TRI_CRV_USD_CURVE_POOL).get_dy(2, 0, 1e18);
 
         // pull CVX price from chainlink
         (, uint256 cvxPrice, , , ) = IOracle(
@@ -207,7 +134,7 @@ contract LlamaLendConvexOracle {
         unchecked {
             reductionPerCliff = 100_000 * 1e18;
         }
-        uint256 supply = IRewards(CVX_TOKEN).totalSupply(); // CVX total supply
+        uint256 supply = IConvexRewards(CVX_TOKEN).totalSupply(); // CVX total supply
         uint256 mintableCvx;
 
         uint256 cliff;
@@ -244,14 +171,14 @@ contract LlamaLendConvexOracle {
         address _vault,
         int256 _delta
     ) public view returns (uint256 baseApr, uint256 boost, uint256 finalApr) {
-        IStrategy strategy = IStrategy(_strategy);
+        IStrategyInterface strategy = IStrategyInterface(_strategy);
         IGauge gauge = IGauge(strategy.gauge());
         IVault vault = IVault(_vault);
 
         // recreate CRV and Reward APR calculations from yDaemon/yExporter
         // tbh probbaly not worth doing the reward calculations yet since that will have to be custom per custom reward token
 
-        uint256 gaugeWeight = ICurvePeriphery(GAUGE_CONTROLLER)
+        uint256 gaugeWeight = IPeriphery(GAUGE_CONTROLLER)
             .gauge_relative_weight(address(gauge));
 
         if (gaugeWeight == 0) {
@@ -274,11 +201,7 @@ contract LlamaLendConvexOracle {
             totalSupply = totalSupply + uint256(_delta);
         }
 
-        uint256 crvPrice = ICurvePool(TRI_CRV_USD_CURVE_POOL).get_dy(
-            2,
-            0,
-            1e18
-        );
+        uint256 crvPrice = IPool(TRI_CRV_USD_CURVE_POOL).get_dy(2, 0, 1e18);
 
         // we need to calculate working_balances from scratch to factor potential changes
         uint256 futureWorkingBalance = (voterGaugeBalance * 40) /

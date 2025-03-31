@@ -1,38 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity ^0.8.18;
 
-interface ICurveStrategyProxy {
-    function balanceOf(address _gauge) external view returns (uint256);
-
-    function harvest(address _gauge) external;
-
-    function claimManyRewards(address _gauge, address[] memory _token) external;
-
-    function deposit(address _gauge, address _token) external;
-
-    function withdraw(
-        address _gauge,
-        address _token,
-        uint256 _amount
-    ) external returns (uint256);
-
-    function approveFactory(address _factory, bool _approved) external;
-
-    function revokeStrategy(address _gauge) external;
-}
-
-interface IGauge {
-    function lp_token() external view returns (address);
-
-    function balanceOf(address _gauge) external view returns (uint256);
-
-    function deposit(uint256 _amount) external;
-
-    function withdraw(uint256 _amount) external;
-
-    function claim_rewards() external;
-}
-
 interface IConvexRewards {
     // strategy's staked balance in the synthetix staking contract
     function balanceOf(address account) external view returns (uint256);
@@ -66,6 +34,10 @@ interface IConvexRewards {
 
     // check our reward period finish
     function periodFinish() external view returns (uint256);
+
+    function totalSupply() external view returns (uint256);
+
+    function rewardRate() external view returns (uint256);
 }
 
 interface IConvexBooster {

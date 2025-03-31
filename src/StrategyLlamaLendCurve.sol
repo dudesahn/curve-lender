@@ -3,9 +3,8 @@ pragma solidity ^0.8.18;
 
 import {Base4626Compounder, ERC20, SafeERC20, Math} from "@periphery/Bases/4626Compounder/Base4626Compounder.sol";
 import {TradeFactorySwapper} from "@periphery/swappers/TradeFactorySwapper.sol";
-import {ICurveStrategyProxy, IGauge} from "./interfaces/ICrvusdInterfaces.sol";
-import {IAuction} from "./interfaces/IAuction.sol";
-import {IPool} from "./interfaces/IPool.sol";
+import {IAuction} from "src/interfaces/IAuction.sol";
+import {IProxy, IGauge, IPool} from "src/interfaces/ICurveInterfaces.sol";
 
 contract StrategyLlamaLendCurve is Base4626Compounder, TradeFactorySwapper {
     using SafeERC20 for ERC20;
@@ -25,7 +24,7 @@ contract StrategyLlamaLendCurve is Base4626Compounder, TradeFactorySwapper {
     }
 
     /// @notice Yearns strategyProxy, needed for interacting with our Curve Voter.
-    ICurveStrategyProxy public immutable proxy;
+    IProxy public immutable proxy;
 
     /// @notice Info about our rewards. See struct NatSpec for more details.
     RewardsInfo public rewardsInfo;
@@ -75,7 +74,7 @@ contract StrategyLlamaLendCurve is Base4626Compounder, TradeFactorySwapper {
     ) Base4626Compounder(_asset, _name, _vault) {
         require(_vault == IGauge(_gauge).lp_token(), "gauge mismatch");
         gauge = _gauge;
-        proxy = ICurveStrategyProxy(_proxy);
+        proxy = IProxy(_proxy);
         CRV.forceApprove(address(TRICRV), type(uint256).max);
     }
 

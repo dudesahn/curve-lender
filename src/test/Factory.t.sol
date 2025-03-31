@@ -2,8 +2,8 @@
 pragma solidity ^0.8.18;
 
 import "forge-std/console2.sol";
-import {LlamaLendCurveFactory} from "../LlamaLendCurveFactory.sol";
-import {Setup, ERC20, IStrategyInterface} from "./utils/Setup.sol";
+import {LlamaLendCurveFactory} from "src/LlamaLendCurveFactory.sol";
+import {Setup, ERC20, IStrategyInterface} from "src/test/utils/Setup.sol";
 
 contract FactoryTest is Setup {
     function setUp() public virtual override {
