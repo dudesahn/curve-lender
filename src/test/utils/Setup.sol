@@ -99,6 +99,7 @@ contract Setup is ExtendedTest, IEvents {
 
     // state vars to use in case we have very low or zero yield; some of our assumptions break
     bool public noBaseYield;
+    bool public lowBaseYield;
     bool public noCrvYield;
 
     LlamaLendOracle public oracle;
@@ -122,7 +123,7 @@ contract Setup is ExtendedTest, IEvents {
         // 2: uWu (extra rewards) (passing, passing)
         // 3: sUSDe (passing, passing)
         // 4: tBTC (passing, passing)
-        // 5: USD0 (passing, no convex). 1 token borrowed.
+        // 5: USD0 (passing, no convex). 1 token borrowed, no meaningful base yield
         // 6: ynETH dead (passing, no convex). empty market.
         // 7: ynETH good (passing, passing). no meaningful base yield but CRV emissions.
         // 8: RCH (passing, no convex). No borrows
@@ -146,9 +147,8 @@ contract Setup is ExtendedTest, IEvents {
         );
 
         // give our factory the power to add strategy/gauges to strategy proxy
-        if (useConvex == false) {
-            setUpProxy();
-        }
+        // no harm in doing this even on convex strategies
+        setUpProxy();
 
         if (useMarket == 0) {
             // wstETH
@@ -157,40 +157,38 @@ contract Setup is ExtendedTest, IEvents {
             pid = 364;
 
             // since this curve vault has TVL, need a few special steps
-            if (useConvex == false) {
-                // trying to deploy this strategy now should revert
-                vm.expectRevert("strategy exists");
-                vm.prank(management);
-                curveFactory.newCurveLender(
-                    "Curve Boosted crvUSD-sDOLA Lender",
-                    curveLendVault,
-                    curveLendGauge
-                );
+            // trying to deploy this strategy now should revert
+            vm.expectRevert("strategy exists");
+            vm.prank(management);
+            curveFactory.newCurveLender(
+                "Curve Boosted crvUSD-sDOLA Lender",
+                curveLendVault,
+                curveLendGauge
+            );
 
-                // need special logic here to shutdown the existing vault
-                IV2StrategyInterface vaultV2 = IV2StrategyInterface(
-                    0xbA8e83CC28B54bB063984033Df20F9a9F1220C24
-                );
-                IV2StrategyInterface strategyV2 = IV2StrategyInterface(
-                    vaultV2.withdrawalQueue(1)
-                );
+            // need special logic here to shutdown the existing vault
+            IV2StrategyInterface vaultV2 = IV2StrategyInterface(
+                0xbA8e83CC28B54bB063984033Df20F9a9F1220C24
+            );
+            IV2StrategyInterface strategyV2 = IV2StrategyInterface(
+                vaultV2.withdrawalQueue(1)
+            );
 
-                // we have to clear this out before we set associate our new strategy with the gauge
-                vm.startPrank(chad);
-                vaultV2.updateStrategyDebtRatio(address(strategyV2), 0);
-                strategyV2.harvest();
-                // now we remove the strategy-gauge linkage on the strategy proxy
-                strategyProxy.revokeStrategy(curveLendGauge);
+            // we have to clear this out before we set associate our new strategy with the gauge
+            vm.startPrank(chad);
+            vaultV2.updateStrategyDebtRatio(address(strategyV2), 0);
+            strategyV2.harvest();
+            // now we remove the strategy-gauge linkage on the strategy proxy
+            strategyProxy.revokeStrategy(curveLendGauge);
 
-                // now we expect the management revert
-                vm.expectRevert("!management");
-                curveFactory.newCurveLender(
-                    "Curve Boosted crvUSD-sDOLA Lender",
-                    curveLendVault,
-                    curveLendGauge
-                );
-                vm.stopPrank();
-            }
+            // now we expect the authorized revert
+            vm.expectRevert("!authorized");
+            curveFactory.newCurveLender(
+                "Curve Boosted crvUSD-sDOLA Lender",
+                curveLendVault,
+                curveLendGauge
+            );
+            vm.stopPrank();
         } else if (useMarket == 1) {
             // sDOLA
             curveLendVault = 0x14361C243174794E2207296a6AD59bb0Dec1d388;
@@ -202,7 +200,12 @@ contract Setup is ExtendedTest, IEvents {
             curveLendGauge = 0xad7B288315b0d71D62827338251A8D89A98132A0;
             pid = 343;
             hasRewards = true;
-            noCrvYield = true;
+
+            // uwu has old crv yield on convex...
+            if (!useConvex) {
+                noCrvYield = true;
+            }
+
             rewardToken = 0x55C08ca52497e2f1534B59E2917BF524D4765257;
 
             // simulate sifu adding more rewards to the gauge
@@ -232,7 +235,7 @@ contract Setup is ExtendedTest, IEvents {
             // USD0 (tiny TVL, 1 crvUSD borrowed, not approved on gauge controller). will revert for convex
             curveLendVault = 0x0111646E459e0BBa57daCA438262f3A092ae24C6;
             curveLendGauge = 0x1d701D23CE74d5B721d24D668A79c44Db2D5A0AE;
-            noBaseYield = true;
+            lowBaseYield = true;
             noCrvYield = true;
         } else if (useMarket == 6) {
             // ynETH dead market (fully empty, not approved on gauge controller). will revert for convex
@@ -245,6 +248,7 @@ contract Setup is ExtendedTest, IEvents {
             curveLendVault = 0x52036c9046247C3358c987A2389FFDe6Ef8564c9;
             curveLendGauge = 0x8966A85b414620ef460DeEaCD821c30c442C433F;
             pid = 415;
+            lowBaseYield = true;
         } else if (useMarket == 8) {
             // RCH, literally 0 borrows, 2k deposited, not on gauge controller
             curveLendVault = 0xc9cCB6E3Cc9D1766965278Bd1e7cc4e58549D1F8;
@@ -339,7 +343,7 @@ contract Setup is ExtendedTest, IEvents {
                 whale = 0xd85351181b3F264ee0FDFa94518464d7c3DefaDa;
             } else if (useMarket == 3) {
                 // sUSDe
-                whale = 0xb99a2c4C1C4F1fc27150681B740396F6CE1cBcF5;
+                whale = 0xE877B2A8a53763C8B0534a15e87da28f3aC1257e;
             } else if (useMarket == 4) {
                 // tbtc
                 whale = 0xF8aaE8D5dd1d7697a4eC6F561737e68a2ab8539e;
@@ -347,6 +351,7 @@ contract Setup is ExtendedTest, IEvents {
             ERC20 collateral_token = ERC20(controller.collateral_token());
             vm.startPrank(whale);
             collateral_token.approve(address(controller), type(uint256).max);
+            // will get revert: Amount too low if whale doesn't have enough here
             controller.create_loan(
                 collateral_token.balanceOf(whale),
                 asset.balanceOf(address(controller)),
@@ -372,6 +377,15 @@ contract Setup is ExtendedTest, IEvents {
             );
             assertEq(_strategy.management(), address(convexFactory));
         } else {
+            // don't deploy with the wrong gauge
+            vm.prank(management);
+            vm.expectRevert("gauge mismatch");
+            curveFactory.newCurveLender(
+                "Convex crvUSD-sDOLA Lender",
+                0x0111646E459e0BBa57daCA438262f3A092ae24C6,
+                0x30e06CADFbC54d61B7821dC1e58026bf3435d2Fe
+            );
+
             // we save the strategy as a IStrategyInterface to give it the needed interface
             vm.prank(management);
             _strategy = IStrategyInterface(

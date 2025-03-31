@@ -115,7 +115,8 @@ contract StrategyLlamaLendConvex is Base4626Compounder, TradeFactorySwapper {
 
     function vaultsMaxWithdraw() public view override returns (uint256) {
         // we use the gauge address here since that's where our convex's voter deposits the LP
-        // should be the minimum of what the gauge can redeem (limited by utilization), and our staked balance + loose vault tokens
+        // should be the minimum of what the gauge can redeem (limited by utilization),
+        //  and our staked balance + loose vault tokens
         return
             vault.convertToAssets(
                 Math.min(
@@ -160,8 +161,6 @@ contract StrategyLlamaLendConvex is Base4626Compounder, TradeFactorySwapper {
             }
         }
     }
-
-    // is it worth adding a hardcoded route for CVX as well? probably...********
 
     function _swapCrvToStable(uint256 _amount) internal {
         // atomic swaps should always be sent via private mempool but use price_oracle as backstop
@@ -228,6 +227,7 @@ contract StrategyLlamaLendConvex is Base4626Compounder, TradeFactorySwapper {
             if (_allRewardTokens[i] == _token) {
                 allRewardTokens[i] = _allRewardTokens[_length - 1];
                 allRewardTokens.pop();
+                break;
             }
         }
         delete swapType[_token];
