@@ -101,6 +101,7 @@ contract Setup is ExtendedTest, IEvents {
     bool public noBaseYield;
     bool public lowBaseYield;
     bool public noCrvYield;
+    bool public emptyConvex;
 
     LlamaLendOracle public oracle;
     LlamaLendConvexOracle public convexOracle;
@@ -128,7 +129,10 @@ contract Setup is ExtendedTest, IEvents {
         // 7: ynETH good (passing, passing). no meaningful base yield but CRV emissions.
         // 8: RCH (passing, no convex). No borrows
 
-        useConvex = false;
+        useConvex = true;
+
+        // do this if we want to test the empty convex market for uWu
+        emptyConvex = false;
 
         /* ========== UPDATE THESE ABOVE FOR TESTING ========== */
 
@@ -263,6 +267,18 @@ contract Setup is ExtendedTest, IEvents {
 
         // setup trade factory
         setUpTradeFactory();
+
+        // do this if we want to test the empty convex market
+        if (useConvex && emptyConvex && useMarket == 2) {
+            address uwu_depositor = 0xabeaE2f19BD2cA5408E050F7498b098ad34b2b26;
+            IConvexRewards rewardsContract = IConvexRewards(
+                strategy.rewardsContract()
+            );
+            uint256 toWithdraw = rewardsContract.totalSupply();
+            vm.prank(uwu_depositor);
+            rewardsContract.withdrawAndUnwrap(toWithdraw, true);
+            assertEq(0, rewardsContract.totalSupply(), "!empty");
+        }
 
         // add our new strategy to the voter proxy
         if (useConvex == false) {
@@ -606,4 +622,6 @@ contract Setup is ExtendedTest, IEvents {
         tokenAddrs["USDC"] = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
         tokenAddrs["crvUSD"] = 0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E;
     }
+
+    function test_setup() public {}
 }

@@ -4,7 +4,7 @@ pragma solidity ^0.8.18;
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IStrategyInterface} from "src/interfaces/IStrategyInterface.sol";
 import {IVault, IPeriphery, IGauge, IPool} from "src/interfaces/ICurveInterfaces.sol";
-import {IConvexRewards} from "src/interfaces/IConvexInterfaces.sol";
+import {IConvexRewards, IConvexBooster} from "src/interfaces/IConvexInterfaces.sol";
 import {IOracle} from "src/interfaces/IChainlinkOracle.sol";
 
 contract LlamaLendConvexOracle {
@@ -22,6 +22,9 @@ contract LlamaLendConvexOracle {
 
     address internal constant CONVEX_VOTER =
         0x989AEb4d175e16225E39E87d0D97A3360524AD80;
+
+    address internal constant BOOSTER =
+        0xF403C135812408BFbE8713b5A23a04b3D48AAE31;
 
     uint256 internal constant SECONDS_PER_YEAR = 31_556_952;
 
@@ -230,5 +233,13 @@ contract LlamaLendConvexOracle {
         }
 
         finalApr = (baseApr * boost) / 1e18;
+
+        // calculate and apply convex fees
+        IConvexBooster booster = IConvexBooster(BOOSTER);
+        uint256 totalFees = booster.lockIncentive() +
+            booster.stakerIncentive() +
+            booster.earmarkIncentive() +
+            booster.platformFee();
+        finalApr = (finalApr * (10_000 - totalFees)) / 10_000;
     }
 }

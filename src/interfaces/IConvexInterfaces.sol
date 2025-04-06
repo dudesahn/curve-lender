@@ -57,4 +57,12 @@ interface IConvexBooster {
     ) external view returns (address, address, address, address, address, bool);
 
     function earmarkRewards(uint256 pid) external;
+
+    function lockIncentive() external view returns (uint256);
+
+    function stakerIncentive() external view returns (uint256);
+
+    function earmarkIncentive() external view returns (uint256);
+
+    function platformFee() external view returns (uint256);
 }
