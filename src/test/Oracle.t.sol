@@ -137,6 +137,17 @@ contract OracleTest is Setup {
             // make sure empty equals zero
             uint256 zeroLendingApr = convexOracle.getLendingApr(emptyVault, 0);
             assertEq(zeroLendingApr, 0, "!zero");
+
+            // do a weird test for empty convex but with gauge weight (ynETH-ynLSDe)
+            // note these APR values will be much higher vs UI since tests assume USD base but it's actually ETH
+            address testStrategy = 0x213Df1840159Bd02A4AAE70Cf34E3F2303D6b4F1;
+            address testVault = 0x823976dA34aC45C23a8DfEa51B3Ff1Ae0D980213;
+            (uint256 baseApr, uint256 boost, uint256 finalCrvApr) = convexOracle
+                .getCrvApr(testStrategy, testVault, 0);
+            console2.log("Data for ynETH-ynLSDe");
+            console2.log("baseCrvApr after fees: %e", baseApr);
+            console2.log("boost: %e", boost);
+            console2.log("finalApr: %e", finalCrvApr);
         } else {
             (uint256 baseCrvApr, uint256 boost, uint256 boostedCrvApr) = oracle
                 .getCrvApr(address(strategy), strategy.vault(), 0);

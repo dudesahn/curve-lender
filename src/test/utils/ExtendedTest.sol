@@ -83,4 +83,6 @@ contract ExtendedTest is Test {
             }
         }
     }
+
+    function test_extended() public {}
 }
