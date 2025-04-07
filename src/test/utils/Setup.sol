@@ -129,7 +129,7 @@ contract Setup is ExtendedTest, IEvents {
         // 7: ynETH good (passing, passing). no meaningful base yield but CRV emissions.
         // 8: RCH (passing, no convex). No borrows
 
-        useConvex = true;
+        useConvex = false;
 
         // do this if we want to test the empty convex market for uWu
         emptyConvex = false;
