@@ -145,19 +145,11 @@ contract StrategyLlamaLendConvex is Base4626Compounder, TradeFactorySwapper {
         // claim rewards
         _claimRewards();
 
-        address[] memory _allRewardTokens = allRewardTokens;
-        uint256 _length = _allRewardTokens.length;
-
-        for (uint256 i; i < _length; ++i) {
-            address token = _allRewardTokens[i];
-            SwapType _swapType = swapType[token];
-
-            // only crv can be sold atomically, all others via auction/tf
-            if (_swapType == SwapType.TRICRV && token == address(CRV)) {
-                uint256 balance = ERC20(token).balanceOf(address(this));
-                if (balance > minAmountToSellMapping[token]) {
-                    _swapCrvToStable(balance);
-                }
+        // check for CRV balance to sell atomically
+        if (swapType[address(CRV)] == SwapType.TRICRV) {
+            uint256 balance = CRV.balanceOf(address(this));
+            if (balance > minAmountToSellMapping[address(CRV)]) {
+                _swapCrvToStable(balance);
             }
         }
     }
@@ -275,8 +267,17 @@ contract StrategyLlamaLendConvex is Base4626Compounder, TradeFactorySwapper {
         address _from,
         SwapType _swapType
     ) external onlyManagement {
-        // just remove instead of setting to null
-        require(_swapType != SwapType.NULL, "!null");
+        // just remove instead of setting to null, make sure we already set a swap type for this asset
+        require(
+            _swapType != SwapType.NULL && swapType[_from] != SwapType.NULL,
+            "!null"
+        );
+
+        if (_swapType == SwapType.TF) {
+            _addToken(_from, address(asset));
+        } else if (swapType[_from] == SwapType.TF) {
+            _removeToken(_from, address(asset));
+        }
         swapType[_from] = _swapType;
     }
 
