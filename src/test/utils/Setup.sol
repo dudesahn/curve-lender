@@ -9,7 +9,7 @@ import {StrategyLlamaLendCurve, ERC20} from "src/StrategyLlamaLendCurve.sol";
 import {StrategyLlamaLendConvex} from "src/StrategyLlamaLendConvex.sol";
 import {LlamaLendCurveFactory} from "src/LlamaLendCurveFactory.sol";
 import {LlamaLendConvexFactory} from "src/LlamaLendConvexFactory.sol";
-import {LlamaLendCurveOracle} from "src/periphery/StrategyAprOracle.sol";
+import {LlamaLendCurveOracle} from "src/periphery/StrategyAprOracleCurve.sol";
 import {LlamaLendConvexOracle} from "src/periphery/StrategyAprOracleConvex.sol";
 
 // interfaces
@@ -103,7 +103,7 @@ contract Setup is ExtendedTest, IEvents {
     bool public noCrvYield;
     bool public emptyConvex;
 
-    LlamaLendOracle public oracle;
+    LlamaLendCurveOracle public oracle;
     LlamaLendConvexOracle public convexOracle;
 
     function setUp() public virtual {
@@ -333,7 +333,7 @@ contract Setup is ExtendedTest, IEvents {
         }
 
         // deploy our oracles
-        oracle = new LlamaLendOracle();
+        oracle = new LlamaLendCurveOracle();
         convexOracle = new LlamaLendConvexOracle();
 
         // label all the used addresses for traces
