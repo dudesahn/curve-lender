@@ -9,7 +9,7 @@ import {StrategyLlamaLendCurve, ERC20} from "src/StrategyLlamaLendCurve.sol";
 import {StrategyLlamaLendConvex} from "src/StrategyLlamaLendConvex.sol";
 import {LlamaLendCurveFactory} from "src/LlamaLendCurveFactory.sol";
 import {LlamaLendConvexFactory} from "src/LlamaLendConvexFactory.sol";
-import {LlamaLendOracle} from "src/periphery/StrategyAprOracle.sol";
+import {LlamaLendCurveOracle} from "src/periphery/StrategyAprOracle.sol";
 import {LlamaLendConvexOracle} from "src/periphery/StrategyAprOracleConvex.sol";
 
 // interfaces
@@ -356,7 +356,7 @@ contract Setup is ExtendedTest, IEvents {
             address whale;
             if (useMarket == 0) {
                 // wstETH
-                whale = 0xd85351181b3F264ee0FDFa94518464d7c3DefaDa;
+                whale = 0x0B925eD163218f6662a35e0f0371Ac234f9E9371;
             } else if (useMarket == 3) {
                 // sUSDe
                 whale = 0xE877B2A8a53763C8B0534a15e87da28f3aC1257e;
