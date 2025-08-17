@@ -1,0 +1,33 @@
+// SPDX-License-Identifier: AGPL-3.0
+pragma solidity 0.8.23;
+
+import {LlamaLendCurveOracle} from "src/periphery/StrategyAprOracleCurve.sol";
+
+import "forge-std/Script.sol";
+
+// ---- Usage ----
+// forge script script/DeployCurveAprOracle.s.sol:DeployCurveAprOracle --account llc2 --rpc-url $ETH_RPC_URL -vvvvv --optimize true
+
+// do real deployment, try slow to see if that helps w/ verification
+// forge script script/DeployCurveAprOracle.s.sol:DeployCurveAprOracle --account llc2 --rpc-url $ETH_RPC_URL -vvvvv --optimize true --etherscan-api-key $ETHERSCAN_TOKEN --slow --verify --broadcast
+
+// verify:
+// needed to manually verify, can copy-paste abi-encoded constructor args from the printed output of the deployment. this command ends with the address and contract to verify, always
+// no constructor (or thus, constructor args) on this one
+// forge verify-contract --rpc-url $ETH_RPC_URL --watch --etherscan-api-key $ETHERSCAN_TOKEN "0xD9192c9d5BCC72273793870a83D3eCFA4a08baaD" LlamaLendCurveOracle
+
+contract DeployCurveAprOracle is Script {
+    function run() external {
+        vm.startBroadcast();
+
+        LlamaLendCurveOracle aprOracle = new LlamaLendCurveOracle();
+
+        console2.log("-----------------------------");
+        console2.log("apr oracle deployed at: %s", address(aprOracle));
+        console2.log("-----------------------------");
+
+        vm.stopBroadcast();
+    }
+}
+
+// apr oracle deployed at: 0xD9192c9d5BCC72273793870a83D3eCFA4a08baaD

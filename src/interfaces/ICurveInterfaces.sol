@@ -23,6 +23,8 @@ interface IProxy {
     function approveStrategy(address _gauge, address _strategy) external;
 
     function revokeStrategy(address _gauge) external;
+
+    function approvedFactories(address _factory) external view returns (bool);
 }
 
 interface IVoter {
