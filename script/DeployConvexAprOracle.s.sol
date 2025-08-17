@@ -12,7 +12,8 @@ import "forge-std/Script.sol";
 // do real deployment, try slow to see if that helps w/ verification
 // forge script script/DeployConvexAprOracle.s.sol:DeployConvexAprOracle --account llc2 --rpc-url $ETH_RPC_URL -vvvvv --etherscan-api-key $ETHERSCAN_TOKEN --verify --broadcast
 
-// verify: automatically verified successfully
+// verify
+// forge verify-contract --rpc-url $ETH_RPC_URL --watch --etherscan-api-key $ETHERSCAN_TOKEN "0x843851a817213BB75196C57fb60fFe1D07fC3204" LlamaLendConvexOracle
 
 contract DeployConvexAprOracle is Script {
     function run() external {
@@ -28,4 +29,5 @@ contract DeployConvexAprOracle is Script {
     }
 }
 
-// apr oracle deployed at: 0x795F98f75b242791e395Fc35f48C0C456C33bbAf
+// apr oracle V1 deployed at: 0x795F98f75b242791e395Fc35f48C0C456C33bbAf
+// apr oracle V2 deployed at: 0x843851a817213BB75196C57fb60fFe1D07fC3204 (amm.rate() fix and reverts when withdrawing more than is free)
