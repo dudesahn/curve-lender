@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity ^0.8.18;
+pragma solidity 0.8.23;
 
 import {Base4626Compounder, ERC20, SafeERC20, Math} from "@periphery/Bases/4626Compounder/Base4626Compounder.sol";
 import {TradeFactorySwapper} from "@periphery/swappers/TradeFactorySwapper.sol";
@@ -212,6 +212,7 @@ contract StrategyLlamaLendCurve is Base4626Compounder, TradeFactorySwapper {
         for (uint256 i; i < _length; ++i) {
             if (_allRewardTokens[i] == _token) {
                 allRewardTokens[i] = _allRewardTokens[_length - 1];
+                //slither-disable-next-line costly-loop
                 allRewardTokens.pop();
                 break;
             }

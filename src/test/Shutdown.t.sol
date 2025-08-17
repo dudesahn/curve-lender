@@ -1,4 +1,4 @@
-pragma solidity ^0.8.18;
+pragma solidity 0.8.23;
 
 import "forge-std/console2.sol";
 import {Setup, ERC20, IStrategyInterface} from "src/test/utils/Setup.sol";

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity ^0.8.18;
+pragma solidity 0.8.23;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IStrategyInterface} from "src/interfaces/IStrategyInterface.sol";
@@ -60,9 +60,7 @@ contract LlamaLendConvexOracle {
             // check how much free liquidity is in the AMM Controller. make sure we're not withdrawing more than that.
             uint256 freeLiquidity = IPeriphery(controller.borrowed_token())
                 .balanceOf(address(controller));
-            if (uint256(-_delta) > freeLiquidity) {
-                return 0;
-            }
+            require(uint256(-_delta) < freeLiquidity, "not enough liquidity");
             assets = assets - uint256(-_delta);
         } else {
             assets = assets + uint256(_delta);
@@ -120,6 +118,7 @@ contract LlamaLendConvexOracle {
         uint256 denominator = totalSupply * vault.pricePerShare();
 
         // calculate APRs for each of the two tokens and then combine them
+        //slither-disable-next-line timestamp
         if (denominator > 0 && rewards.periodFinish() > block.timestamp) {
             crvApr =
                 (crvPrice * SECONDS_PER_YEAR * rewardRate * 1e18) /
@@ -149,7 +148,7 @@ contract LlamaLendConvexOracle {
             reductionPerCliff = 100_000 * 1e18;
         }
         uint256 supply = IConvexRewards(CVX_TOKEN).totalSupply(); // CVX total supply
-        uint256 mintableCvx;
+        uint256 mintableCvx = 0;
 
         uint256 cliff;
         unchecked {
@@ -230,11 +229,13 @@ contract LlamaLendConvexOracle {
             futureWorkingBalance -
             currentWorkingBalance;
 
+        // slither-disable-start divide-before-multiply
         baseApr =
             (((10 * crvPrice * SECONDS_PER_YEAR * gauge.inflation_rate()) /
                 futureWorkingSupply) * gaugeWeight) /
             (vault.pricePerShare() * 25);
 
+        //slither-disable-next-line incorrect-equality
         if (voterGaugeBalance == 0) {
             boost = 2.5e18;
         } else {
@@ -252,5 +253,6 @@ contract LlamaLendConvexOracle {
             booster.earmarkIncentive() +
             booster.platformFee();
         finalApr = (finalApr * (10_000 - totalFees)) / 10_000;
+        // slither-disable-end divide-before-multiply
     }
 }

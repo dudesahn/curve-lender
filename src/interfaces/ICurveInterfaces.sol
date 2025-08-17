@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity ^0.8.18;
+pragma solidity 0.8.23;
 
 interface IProxy {
     function balanceOf(address _gauge) external view returns (uint256);

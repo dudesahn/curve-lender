@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity ^0.8.18;
+pragma solidity 0.8.23;
 
 import {StrategyLlamaLendCurve} from "src/StrategyLlamaLendCurve.sol";
 import {IStrategyInterface} from "src/interfaces/IStrategyInterface.sol";
@@ -36,17 +36,31 @@ contract LlamaLendCurveFactory {
         0x78eDcb307AC1d1F8F5Fd070B377A6e69C8dcFC34;
 
     event NewCurveLender(address indexed strategy, address indexed vault);
+    event AddressesSet(
+        address indexed management,
+        address indexed emergencyAdmin,
+        address indexed operator,
+        address keeper,
+        address performanceFeeRecipient
+    );
 
     constructor(
         address _management,
-        address _peformanceFeeRecipient,
+        address _performanceFeeRecipient,
         address _keeper,
         address _emergencyAdmin
     ) {
+        require(
+            _performanceFeeRecipient != address(0) &&
+                _management != address(0) &&
+                _emergencyAdmin != address(0),
+            "ZERO_ADDRESS"
+        );
         management = _management;
-        performanceFeeRecipient = _peformanceFeeRecipient;
-        keeper = _keeper;
         emergencyAdmin = _emergencyAdmin;
+        performanceFeeRecipient = _performanceFeeRecipient;
+        //slither-disable-next-line missing-zero-check
+        keeper = _keeper;
     }
 
     /**
@@ -62,6 +76,7 @@ contract LlamaLendCurveFactory {
         address _vault,
         address _gauge
     ) external returns (address strategy) {
+        // slither-disable-start reentrancy-no-eth,reentrancy-events
         require(
             msg.sender == management || msg.sender == operator,
             "!authorized"
@@ -104,6 +119,7 @@ contract LlamaLendCurveFactory {
         IProxy(strategyProxy).approveStrategy(_gauge, address(newStrategy));
 
         strategy = address(newStrategy);
+        // slither-disable-end reentrancy-no-eth,reentrancy-events
     }
 
     /**
@@ -145,8 +161,18 @@ contract LlamaLendCurveFactory {
         );
         management = _management;
         performanceFeeRecipient = _performanceFeeRecipient;
+        //slither-disable-next-line missing-zero-check
         keeper = _keeper;
         emergencyAdmin = _emergencyAdmin;
+        //slither-disable-next-line missing-zero-check
         operator = _operator;
+
+        emit AddressesSet(
+            _management,
+            _emergencyAdmin,
+            _operator,
+            _keeper,
+            _performanceFeeRecipient
+        );
     }
 }

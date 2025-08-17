@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity ^0.8.18;
+pragma solidity 0.8.23;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IStrategyInterface} from "src/interfaces/IStrategyInterface.sol";
@@ -52,9 +52,7 @@ contract LlamaLendCurveOracle {
             // check how much free liquidity is in the AMM Controller. make sure we're not withdrawing more than that.
             uint256 freeLiquidity = IPeriphery(controller.borrowed_token())
                 .balanceOf(address(controller));
-            if (uint256(-_delta) > freeLiquidity) {
-                return 0;
-            }
+            require(uint256(-_delta) < freeLiquidity, "not enough liquidity");
             assets = assets - uint256(-_delta);
         } else {
             assets = assets + uint256(_delta);
@@ -126,11 +124,13 @@ contract LlamaLendCurveOracle {
             futureWorkingBalance -
             currentWorkingBalance;
 
+        // slither-disable-start divide-before-multiply
         baseApr =
             (((10 * crvPrice * SECONDS_PER_YEAR * gauge.inflation_rate()) /
                 futureWorkingSupply) * gaugeWeight) /
             (vault.pricePerShare() * 25);
 
+        //slither-disable-next-line incorrect-equality
         if (voterGaugeBalance == 0) {
             boost = 2.5e18;
         } else {
@@ -140,5 +140,6 @@ contract LlamaLendCurveOracle {
         }
 
         finalApr = (baseApr * boost) / 1e18;
+        // slither-disable-end divide-before-multiply
     }
 }

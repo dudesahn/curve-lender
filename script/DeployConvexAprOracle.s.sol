@@ -6,10 +6,11 @@ import {LlamaLendConvexOracle} from "src/periphery/StrategyAprOracleConvex.sol";
 import "forge-std/Script.sol";
 
 // ---- Usage ----
-// forge script script/DeployConvexAprOracle.s.sol:DeployConvexAprOracle --account llc2 --rpc-url $ETH_RPC_URL -vvvvv --optimize true
+// make sure to flip on optimization in foundry.toml if not using the flag in the command line
+// forge script script/DeployConvexAprOracle.s.sol:DeployConvexAprOracle --account llc2 --rpc-url $ETH_RPC_URL -vvvvv
 
 // do real deployment, try slow to see if that helps w/ verification
-// forge script script/DeployConvexAprOracle.s.sol:DeployConvexAprOracle --account llc2 --rpc-url $ETH_RPC_URL -vvvvv --optimize true --etherscan-api-key $ETHERSCAN_TOKEN --verify --broadcast
+// forge script script/DeployConvexAprOracle.s.sol:DeployConvexAprOracle --account llc2 --rpc-url $ETH_RPC_URL -vvvvv --etherscan-api-key $ETHERSCAN_TOKEN --verify --broadcast
 
 // verify: automatically verified successfully
 

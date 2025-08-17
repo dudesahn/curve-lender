@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity ^0.8.18;
+pragma solidity 0.8.23;
 
 import "forge-std/console2.sol";
 import {Test} from "forge-std/Test.sol";
@@ -261,9 +261,10 @@ contract Setup is Test, IEvents {
             noBaseYield = true;
             noCrvYield = true;
         } else if (useMarket == 9) {
-            // RCH, literally 0 borrows, 2k deposited, not on gauge controller
+            // fxSAVE, not added as a strategy yet
             curveLendVault = 0x7430f11Eeb64a4ce50C8f92177485d34C48DA72c;
             curveLendGauge = 0xFFf3e31fbAB60ea73ea4a11eA796877F73d77E0f;
+            pid = 483;
         }
 
         // Deploy strategy and set variables
