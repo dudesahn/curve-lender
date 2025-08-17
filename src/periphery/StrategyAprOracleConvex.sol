@@ -3,7 +3,7 @@ pragma solidity ^0.8.18;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IStrategyInterface} from "src/interfaces/IStrategyInterface.sol";
-import {IVault, IPeriphery, IGauge, IPool} from "src/interfaces/ICurveInterfaces.sol";
+import {IVault, IController, IPeriphery, IGauge, IPool} from "src/interfaces/ICurveInterfaces.sol";
 import {IConvexRewards, IConvexBooster} from "src/interfaces/IConvexInterfaces.sol";
 import {IOracle} from "src/interfaces/IChainlinkOracle.sol";
 
@@ -52,10 +52,17 @@ contract LlamaLendConvexOracle {
         int256 _delta
     ) public view returns (uint256 lend_apr) {
         IVault vault = IVault(_vault);
+        IController controller = IController(vault.controller());
 
         // Step 1: Calculate native yield
         uint256 assets = vault.totalAssets();
         if (_delta < 0) {
+            // check how much free liquidity is in the AMM Controller. make sure we're not withdrawing more than that.
+            uint256 freeLiquidity = IPeriphery(controller.borrowed_token())
+                .balanceOf(address(controller));
+            if (uint256(-_delta) > freeLiquidity) {
+                return 0;
+            }
             assets = assets - uint256(-_delta);
         } else {
             assets = assets + uint256(_delta);
@@ -67,13 +74,17 @@ contract LlamaLendConvexOracle {
 
         // code for lend_apr from curve vault
         // debt: uint256 = self.controller.total_debt()
-        // self.amm.rate() * (365 * 86400) * debt / self._total_assets()
+        // apr = self.amm.rate() * (365 * 86400) * debt / self._total_assets()
 
-        lend_apr =
-            (IPeriphery(vault.amm()).rate() *
-                (365 * 86400) *
-                IPeriphery(vault.controller()).total_debt()) /
-            assets;
+        // calculate the future rate from our deposit/withdrawal
+        uint256 rate = IPeriphery(controller.monetary_policy()).future_rate(
+            address(controller),
+            _delta,
+            0
+        );
+        rate = Math.min(43959106799, rate); // max of 300% APY hardcoded in controller
+
+        lend_apr = (rate * (365 * 86400) * controller.total_debt()) / assets;
     }
 
     function getConvexApr(

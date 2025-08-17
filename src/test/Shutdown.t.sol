@@ -76,7 +76,12 @@ contract ShutdownTest is Setup {
 
         // assets shouldn't have gone anywhere
         if (noBaseYield) {
-            assertApproxEq(strategy.totalAssets(), _amount, 1, "!totalAssets");
+            assertApproxEqAbs(
+                strategy.totalAssets(),
+                _amount,
+                1,
+                "!totalAssets"
+            );
         } else {
             assertEq(strategy.totalAssets(), _amount, "!totalAssets");
         }

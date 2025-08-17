@@ -2,7 +2,7 @@
 pragma solidity ^0.8.18;
 
 import "forge-std/console2.sol";
-import {ExtendedTest} from "./ExtendedTest.sol";
+import {Test} from "forge-std/Test.sol";
 
 // contracts
 import {StrategyLlamaLendCurve, ERC20} from "src/StrategyLlamaLendCurve.sol";
@@ -32,7 +32,7 @@ interface IFactory {
     function set_protocol_fee_recipient(address) external;
 }
 
-contract Setup is ExtendedTest, IEvents {
+contract Setup is Test, IEvents {
     // Contract instances that we will use repeatedly.
     ERC20 public asset;
     IStrategyInterface public strategy;
@@ -118,9 +118,9 @@ contract Setup is ExtendedTest, IEvents {
         /* ========== UPDATE THESE BELOW FOR TESTING ========== */
 
         // set market/gauge variables
-        useMarket = 0;
+        useMarket = 9;
         // 0: wstETH (passing, passing)
-        // 1: sDOLA (passing, passing)
+        // 1: sDOLA
         // 2: uWu (extra rewards) (passing, passing)
         // 3: sUSDe (passing, passing)
         // 4: tBTC (passing, passing)
@@ -128,6 +128,7 @@ contract Setup is ExtendedTest, IEvents {
         // 6: ynETH dead (passing, no convex). empty market.
         // 7: ynETH good (passing, passing). no meaningful base yield but CRV emissions.
         // 8: RCH (passing, no convex). No borrows
+        // 9: fxSAVE (passing, passing). Use this for after deployment to test oracle fix
 
         useConvex = false;
 
@@ -259,6 +260,10 @@ contract Setup is ExtendedTest, IEvents {
             curveLendGauge = 0x11C2a9fac65809c527bcb04FB7EC52080F053dc0;
             noBaseYield = true;
             noCrvYield = true;
+        } else if (useMarket == 9) {
+            // RCH, literally 0 borrows, 2k deposited, not on gauge controller
+            curveLendVault = 0x7430f11Eeb64a4ce50C8f92177485d34C48DA72c;
+            curveLendGauge = 0xFFf3e31fbAB60ea73ea4a11eA796877F73d77E0f;
         }
 
         // Deploy strategy and set variables
@@ -319,6 +324,10 @@ contract Setup is ExtendedTest, IEvents {
                 // RCH no borrows, not approved
                 vm.prank(management);
                 strategy.setClaimFlags(false, false);
+            } else if (useMarket == 9) {
+                // fxSAVE
+                vm.prank(management);
+                strategy.setClaimFlags(true, false);
             }
         } else {
             // check if there is any CRV we need to earmark
@@ -397,9 +406,9 @@ contract Setup is ExtendedTest, IEvents {
             vm.prank(management);
             vm.expectRevert("gauge mismatch");
             curveFactory.newCurveLender(
-                "Convex crvUSD-sDOLA Lender",
-                0x0111646E459e0BBa57daCA438262f3A092ae24C6,
-                0x30e06CADFbC54d61B7821dC1e58026bf3435d2Fe
+                "Convex crvUSD-fxSAVE Lender",
+                0x7430f11Eeb64a4ce50C8f92177485d34C48DA72c, // fxSAVE vault
+                0x8966A85b414620ef460DeEaCD821c30c442C433F // ynETH gauge
             );
 
             // we save the strategy as a IStrategyInterface to give it the needed interface
@@ -622,6 +631,4 @@ contract Setup is ExtendedTest, IEvents {
         tokenAddrs["USDC"] = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
         tokenAddrs["crvUSD"] = 0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E;
     }
-
-    function test_setup() public {}
 }

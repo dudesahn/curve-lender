@@ -29,9 +29,9 @@ snapshot :; forge snapshot -vv --fork-url ${FORK_URL}
 snapshot-diff :; forge snapshot --diff -vv --fork-url ${FORK_URL}
 trace-setup  :; forge test -vvvv --fork-url ${FORK_URL}
 trace-max  :; forge test -vvvvv --fork-url ${FORK_URL}
-coverage :; forge coverage --fork-url ${FORK_URL}
-coverage-report :; forge coverage --report lcov --fork-url ${FORK_URL}
-coverage-debug :; forge coverage --report debug --fork-url ${FORK_URL}
+coverage :; forge coverage --fork-url ${FORK_URL} --no-match-coverage "script|libraries|Setup.sol"
+coverage-report :; forge coverage --report lcov --fork-url ${FORK_URL} --no-match-coverage "script|libraries|Setup.sol"
+coverage-debug :; forge coverage --report debug --fork-url ${FORK_URL} --no-match-coverage "script|libraries|Setup.sol"
 
 
 clean  :; forge clean

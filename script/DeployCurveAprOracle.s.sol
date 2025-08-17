@@ -30,4 +30,5 @@ contract DeployCurveAprOracle is Script {
     }
 }
 
-// apr oracle deployed at: 0xD9192c9d5BCC72273793870a83D3eCFA4a08baaD
+// apr oracle V1 deployed at: 0xD9192c9d5BCC72273793870a83D3eCFA4a08baaD
+// apr oracle V2 deployed at: 0xff7020A542D8fD2591615C6B8EC33e30b61f67b5
