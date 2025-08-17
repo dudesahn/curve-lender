@@ -5,7 +5,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IStrategyInterface} from "src/interfaces/IStrategyInterface.sol";
 import {IVault, IPeriphery, IGauge, IPool} from "src/interfaces/ICurveInterfaces.sol";
 
-contract LlamaLendOracle {
+contract LlamaLendCurveOracle {
     address internal constant TRI_CRV_USD_CURVE_POOL =
         0x4eBdF703948ddCEA3B11f675B4D1Fba9d2414A14;
 

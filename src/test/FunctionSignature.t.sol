@@ -34,7 +34,7 @@ contract FunctionSignatureTest is Setup {
         assertEq(strategy.totalSupply(), 0, "total supply");
         assertEq(strategy.unlockedShares(), 0, "unlocked shares");
         assertEq(strategy.asset(), address(asset), "asset");
-        assertEq(strategy.apiVersion(), "3.0.2", "api");
+        assertEq(strategy.apiVersion(), "3.0.4", "api");
         assertEq(strategy.MAX_FEE(), 5_000, "max fee");
         assertEq(strategy.fullProfitUnlockDate(), 0, "unlock date");
         assertEq(strategy.profitUnlockingRate(), 0, "unlock rate");
@@ -89,5 +89,10 @@ contract FunctionSignatureTest is Setup {
         assertTrue(strategy.transferFrom(keeper, user, wad), "transfer from");
         assertEq(strategy.balanceOf(user), wad, "second balance");
         assertEq(strategy.balanceOf(keeper), 0, "keeper balance");
+
+        // log our strategy version just to make sure it's extra clear...
+        console2.log("-----------------------------");
+        console2.log("tokenized-strategy version: ", strategy.apiVersion());
+        console2.log("-----------------------------");
     }
 }
