@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity ^0.8.18;
+pragma solidity 0.8.23;
 
 interface IProxy {
     function balanceOf(address _gauge) external view returns (uint256);
@@ -68,6 +68,12 @@ interface IController {
     function create_loan(uint256 collateral, uint256 debt, uint256 n) external;
 
     function collateral_token() external view returns (address);
+
+    function borrowed_token() external view returns (address);
+
+    function monetary_policy() external view returns (address);
+
+    function total_debt() external view returns (uint256);
 }
 
 interface IPool {
@@ -88,9 +94,15 @@ interface IPool {
 }
 
 interface IPeriphery {
-    function total_debt() external view returns (uint256);
+    function gauge_relative_weight(address) external view returns (uint256);
+
+    function balanceOf(address) external view returns (uint256);
 
     function rate() external view returns (uint256);
 
-    function gauge_relative_weight(address) external view returns (uint256);
+    function future_rate(
+        address,
+        int256,
+        int256
+    ) external view returns (uint256);
 }

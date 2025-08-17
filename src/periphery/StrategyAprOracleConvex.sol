@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0
-pragma solidity ^0.8.18;
+pragma solidity 0.8.23;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IStrategyInterface} from "src/interfaces/IStrategyInterface.sol";
-import {IVault, IPeriphery, IGauge, IPool} from "src/interfaces/ICurveInterfaces.sol";
+import {IVault, IController, IPeriphery, IGauge, IPool} from "src/interfaces/ICurveInterfaces.sol";
 import {IConvexRewards, IConvexBooster} from "src/interfaces/IConvexInterfaces.sol";
 import {IOracle} from "src/interfaces/IChainlinkOracle.sol";
 
@@ -52,10 +52,15 @@ contract LlamaLendConvexOracle {
         int256 _delta
     ) public view returns (uint256 lend_apr) {
         IVault vault = IVault(_vault);
+        IController controller = IController(vault.controller());
 
         // Step 1: Calculate native yield
         uint256 assets = vault.totalAssets();
         if (_delta < 0) {
+            // check how much free liquidity is in the AMM Controller. make sure we're not withdrawing more than that.
+            uint256 freeLiquidity = IPeriphery(controller.borrowed_token())
+                .balanceOf(address(controller));
+            require(uint256(-_delta) < freeLiquidity, "not enough liquidity");
             assets = assets - uint256(-_delta);
         } else {
             assets = assets + uint256(_delta);
@@ -67,13 +72,17 @@ contract LlamaLendConvexOracle {
 
         // code for lend_apr from curve vault
         // debt: uint256 = self.controller.total_debt()
-        // self.amm.rate() * (365 * 86400) * debt / self._total_assets()
+        // apr = self.amm.rate() * (365 * 86400) * debt / self._total_assets()
 
-        lend_apr =
-            (IPeriphery(vault.amm()).rate() *
-                (365 * 86400) *
-                IPeriphery(vault.controller()).total_debt()) /
-            assets;
+        // calculate the future rate from our deposit/withdrawal
+        uint256 rate = IPeriphery(controller.monetary_policy()).future_rate(
+            address(controller),
+            _delta,
+            0
+        );
+        rate = Math.min(43959106799, rate); // max of 300% APY hardcoded in controller
+
+        lend_apr = (rate * (365 * 86400) * controller.total_debt()) / assets;
     }
 
     function getConvexApr(
@@ -109,6 +118,7 @@ contract LlamaLendConvexOracle {
         uint256 denominator = totalSupply * vault.pricePerShare();
 
         // calculate APRs for each of the two tokens and then combine them
+        //slither-disable-next-line timestamp
         if (denominator > 0 && rewards.periodFinish() > block.timestamp) {
             crvApr =
                 (crvPrice * SECONDS_PER_YEAR * rewardRate * 1e18) /
@@ -138,7 +148,7 @@ contract LlamaLendConvexOracle {
             reductionPerCliff = 100_000 * 1e18;
         }
         uint256 supply = IConvexRewards(CVX_TOKEN).totalSupply(); // CVX total supply
-        uint256 mintableCvx;
+        uint256 mintableCvx = 0;
 
         uint256 cliff;
         unchecked {
@@ -219,11 +229,13 @@ contract LlamaLendConvexOracle {
             futureWorkingBalance -
             currentWorkingBalance;
 
+        // slither-disable-start divide-before-multiply
         baseApr =
             (((10 * crvPrice * SECONDS_PER_YEAR * gauge.inflation_rate()) /
                 futureWorkingSupply) * gaugeWeight) /
             (vault.pricePerShare() * 25);
 
+        //slither-disable-next-line incorrect-equality
         if (voterGaugeBalance == 0) {
             boost = 2.5e18;
         } else {
@@ -241,5 +253,6 @@ contract LlamaLendConvexOracle {
             booster.earmarkIncentive() +
             booster.platformFee();
         finalApr = (finalApr * (10_000 - totalFees)) / 10_000;
+        // slither-disable-end divide-before-multiply
     }
 }

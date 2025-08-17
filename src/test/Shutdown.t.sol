@@ -1,4 +1,4 @@
-pragma solidity ^0.8.18;
+pragma solidity 0.8.23;
 
 import "forge-std/console2.sol";
 import {Setup, ERC20, IStrategyInterface} from "src/test/utils/Setup.sol";
@@ -76,7 +76,12 @@ contract ShutdownTest is Setup {
 
         // assets shouldn't have gone anywhere
         if (noBaseYield) {
-            assertApproxEq(strategy.totalAssets(), _amount, 1, "!totalAssets");
+            assertApproxEqAbs(
+                strategy.totalAssets(),
+                _amount,
+                1,
+                "!totalAssets"
+            );
         } else {
             assertEq(strategy.totalAssets(), _amount, "!totalAssets");
         }

@@ -1,4 +1,4 @@
-pragma solidity ^0.8.18;
+pragma solidity 0.8.23;
 
 import "forge-std/console2.sol";
 import {ERC20, Setup} from "src/test/utils/Setup.sol";
@@ -80,6 +80,7 @@ contract OracleTest is Setup {
 
             // no need to do anything else if we're not changing
             if (_delta != 0) {
+                // we can only withdraw free liquidity
                 uint256 negativeDebtChangeApr = oracle.aprAfterDebtChange(
                     _strategy,
                     -int256(_delta)
