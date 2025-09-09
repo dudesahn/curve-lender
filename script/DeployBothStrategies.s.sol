@@ -58,11 +58,11 @@ contract DeployBothStrategies is Script {
     // all legacy curve lend vaults were revoked here: https://github.com/yearn/chief-multisig-officer/pull/1533/files
 
     // wstETH (v2 version revoked), deployed both ✅
-    address public curveLendVault = 0x21CF1c5Dc48C603b89907FE6a7AE83EA5e3709aF;
-    address public curveLendGauge = 0x0621982CdA4fD4041964e91AF4080583C5F099e1;
-    uint256 public pid = 364;
-    string public curveStrategyName = "Curve Boosted crvUSD-wstETH Lender";
-    string public convexStrategyName = "Convex crvUSD-wstETH Lender";
+    //     address public curveLendVault = 0x21CF1c5Dc48C603b89907FE6a7AE83EA5e3709aF;
+    //     address public curveLendGauge = 0x0621982CdA4fD4041964e91AF4080583C5F099e1;
+    //     uint256 public pid = 364;
+    //     string public curveStrategyName = "Curve Boosted crvUSD-wstETH Lender";
+    //     string public convexStrategyName = "Convex crvUSD-wstETH Lender";
 
     // USDe (v2 version revoked), deployed both ✅
     //     address public curveLendVault = 0xc687141c18F20f7Ba405e45328825579fDdD3195;
@@ -92,26 +92,40 @@ contract DeployBothStrategies is Script {
     //     string public curveStrategyName = "Curve Boosted crvUSD-WBTC Lender";
     //     string public convexStrategyName = "Convex crvUSD-WBTC Lender";
 
-    // WETH (v2 version revoked)
+    // WETH (v2 version revoked), Curve only, no CRV emissions, deployed ✅
     //     address public curveLendVault = 0x8fb1c7AEDcbBc1222325C39dd5c1D2d23420CAe3;
     //     address public curveLendGauge = 0xF3F6D6d412a77b680ec3a5E35EbB11BbEC319739;
-    //     uint256 public pid = 365;
+    //     uint256 public pid = 0; // 365
     //     string public curveStrategyName = "Curve Boosted crvUSD-WETH Lender";
     //     string public convexStrategyName = "Convex crvUSD-WETH Lender";
 
-    // sUSDS
+    // sUSDS, not deployed yet 🚫
     //     address public curveLendVault = 0xc33aa628b10655B36Eaa7ee880D6Bc4789dD2289;
     //     address public curveLendGauge = 0x1a915D963EE65943387dd35F54F0296BE4f925e5;
     //     uint256 public pid = 453;
     //     string public curveStrategyName = "Curve Boosted crvUSD-sUSDS Lender";
     //     string public convexStrategyName = "Convex crvUSD-sUSDS Lender";
 
-    // CRV (maybe don't need Convex version immediately)
+    // CRV, not deployed yet 🚫
     //     address public curveLendVault = 0xCeA18a8752bb7e7817F9AE7565328FE415C0f2cA;
     //     address public curveLendGauge = 0x49887dF6fE905663CDB46c616BfBfBB50e85a265;
     //     uint256 public pid = 325;
     //     string public curveStrategyName = "Curve Boosted crvUSD-CRV Lender";
     //     string public convexStrategyName = "Convex crvUSD-CRV Lender";
+
+    // sreUSD, deployed both ✅
+    address public curveLendVault = 0xC32B0Cf36e06c790A568667A17DE80cba95A5Aad;
+    address public curveLendGauge = 0x29E9975561fAD3A7988CA96361AB5c5317CB32Af;
+    uint256 public pid = 492;
+    string public curveStrategyName = "Curve Boosted crvUSD-sreUSD Lender";
+    string public convexStrategyName = "Convex crvUSD-sreUSD Lender";
+
+    // fxSAVE, deployed both ✅
+    //     address public curveLendVault = 0x7430f11Eeb64a4ce50C8f92177485d34C48DA72c;
+    //     address public curveLendGauge = 0xFFf3e31fbAB60ea73ea4a11eA796877F73d77E0f;
+    //     uint256 public pid = 483;
+    //     string public curveStrategyName = "Curve Boosted crvUSD-fxSAVE Lender";
+    //     string public convexStrategyName = "Convex crvUSD-fxSAVE Lender";
 
     function run() external {
         vm.startBroadcast();
@@ -158,6 +172,9 @@ contract DeployBothStrategies is Script {
 // WBTC  Curve: 0xEC1b4489a2DA2b0F7Fb240604f305804Da2CEB1c Convex: 0xBEE5Ce147a7F735C94DF37a50c82296861B5FEF5
 // sDOLAv1  Curve: 0xab4037b34d76ba0D42F5828B2214d1BAEe395596 Convex: N/A
 // wstETH  Curve: 0x2d45C2835CEA592F75E72e656932aa60d474dDF3 Convex: 0x8E6631Ff8D431a6122fDF0bfE756F624Dd3744e7
+// WETH  Curve: 0x8589462548984c5C0f2C0140FB276351B5a77fe1 Convex: N/A
+// fxSAVE  Curve: 0x5103D3Ee6d599984609DAaAdD3a439152cc0C392 Convex: 0x6c7150b9eb23eE563b28905791aD5B6C9cB6B21a
+// sreUSD  Curve: 0x09AcE8B2f2fE2189A5B37046BBaFa29Dce31c920 Convex: 0xBaadd4b44929606178FcDBd2f4309282f39D9dA7
 // ASSET  Curve: Convex:
 // ASSET  Curve: Convex:
 // ASSET  Curve: Convex:
